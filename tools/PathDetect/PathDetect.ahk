@@ -223,25 +223,24 @@ RestartDetector() {
 StartWithUnit() {
     global PlaceKey
 
-    StartDetector()
-    if !IsRunning()
-        return
-
     LoadPlaceSettings()
 
+    ; сначала уводим курсор и жмём клавишу — только потом снимок экрана
     hwnd := GetGameHwnd()
-    if !hwnd
-        return
+    if hwnd {
+        WinActivate, ahk_id %hwnd%
+        Sleep, 150
 
-    WinActivate, ahk_id %hwnd%
-    Sleep, 150
+        CoordMode, Mouse, Screen
+        WinGetPos, gx, gy, gw, gh, ahk_id %hwnd%
+        MouseMove, gx + 1, gy + 1, 0
+        Sleep, 120
 
-    CoordMode, Mouse, Screen
-    WinGetPos, gx, gy, gw, gh, ahk_id %hwnd%
-    MouseMove, gx + 1, gy + 1, 0
-    Sleep, 60
+        Send, %PlaceKey%
+        Sleep, 60
+    }
 
-    Send, %PlaceKey%
+    StartDetector()
 }
 
 ;=============================================================
