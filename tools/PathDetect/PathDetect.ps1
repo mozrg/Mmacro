@@ -44,10 +44,6 @@ $script:nearBuf = $null
 $script:nearStride = 0
 $script:nearW = 0
 $script:nearH = 0
-$script:diffShot = $null
-$script:dynArr = $null
-$script:dynW = 0
-$script:dynH = 0
 $script:pathPercent = 0
 $script:showGrid = $true
 
@@ -359,56 +355,6 @@ function Get-HolesBitmap($maskFull) {
     return $full
 }
 
-# Сравнение двух кадров: где картинка меняется — там персонаж/враги/эффекты.
-function Get-DynamicMask($a, $b) {
-    if (-not $a -or -not $b) { return $null }
-    $sw = [Math]::Max(16, [int][Math]::Round($a.Width * 0.25))
-    $sh = [Math]::Max(16, [int][Math]::Round($a.Height * 0.25))
-
-    $sa = New-Object System.Drawing.Bitmap $sw, $sh, ([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
-    $ga = [System.Drawing.Graphics]::FromImage($sa)
-    $ga.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBilinear
-    $ga.DrawImage($a, 0, 0, $sw, $sh)
-    $ga.Dispose()
-
-    $sb = New-Object System.Drawing.Bitmap $sw, $sh, ([System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
-    $gb = [System.Drawing.Graphics]::FromImage($sb)
-    $gb.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBilinear
-    $gb.DrawImage($b, 0, 0, $sw, $sh)
-    $gb.Dispose()
-
-    $rect = New-Object System.Drawing.Rectangle 0, 0, $sw, $sh
-    $data1 = $sa.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
-    $stride1 = $data1.Stride
-    $buf1 = [byte[]]::new($stride1 * $sh)
-    [System.Runtime.InteropServices.Marshal]::Copy($data1.Scan0, $buf1, 0, $buf1.Length)
-    $sa.UnlockBits($data1)
-    $sa.Dispose()
-
-    $data2 = $sb.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::ReadOnly, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
-    $stride2 = $data2.Stride
-    $buf2 = [byte[]]::new($stride2 * $sh)
-    [System.Runtime.InteropServices.Marshal]::Copy($data2.Scan0, $buf2, 0, $buf2.Length)
-    $sb.UnlockBits($data2)
-    $sb.Dispose()
-
-    $arr = [bool[]]::new($sw * $sh)
-    for ($y = 0; $y -lt $sh; $y++) {
-        $row1 = $y * $stride1
-        $row2 = $y * $stride2
-        $base = $y * $sw
-        for ($x = 0; $x -lt $sw; $x++) {
-            $o1 = $row1 + $x * 3
-            $o2 = $row2 + $x * 3
-            $diff = [Math]::Abs([int]$buf1[$o1] - [int]$buf2[$o2]) +
-                    [Math]::Abs([int]$buf1[$o1 + 1] - [int]$buf2[$o2 + 1]) +
-                    [Math]::Abs([int]$buf1[$o1 + 2] - [int]$buf2[$o2 + 2])
-            if ($diff -gt 120) { $arr[$base + $x] = $true }
-        }
-    }
-    return @{ Arr = $arr; W = $sw; H = $sh }
-}
-
 function Get-PathPercent {
     if (-not $script:maskBuf) { return 0 }
     $step = 16
@@ -438,7 +384,6 @@ function Draw-Grid($bmp, $fw, $fh) {
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $green = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(0, 255, 80))
     $red = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 60, 60))
-    $gray = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(175, 175, 175))
     try {
         $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
         $buf = $script:maskBuf
@@ -466,22 +411,13 @@ function Draw-Grid($bmp, $fw, $fh) {
                     }
                 }
                 if ($blocked) { $br = $red } else { $br = $green }
-                $dyn = $false
-                if ($script:dynArr) {
-                    $dx = [int]($x * $script:dynW / $fw)
-                    $dy = [int]($y * $script:dynH / $fh)
-                    if ($dx -ge 0 -and $dy -ge 0 -and $dx -lt $script:dynW -and $dy -lt $script:dynH) {
-                        $dyn = $script:dynArr[$dy * $script:dynW + $dx]
-                    }
-                }
-                if ($dyn) { $br = $gray }
+
                 $g.FillEllipse($br, $x - $r, $y - $r, $r * 2, $r * 2)
             }
         }
     } finally {
         $green.Dispose()
         $red.Dispose()
-        $gray.Dispose()
         $g.Dispose()
     }
 }
@@ -526,14 +462,7 @@ function Build-Preview {
     $script:nearW = $nb.W
     $script:nearH = $nb.H
 
-    $dyn = Get-DynamicMask $shot $script:diffShot
-    if ($dyn) {
-        $script:dynArr = $dyn.Arr
-        $script:dynW = $dyn.W
-        $script:dynH = $dyn.H
-    } else {
-        $script:dynArr = $null
-    }
+
 
     $overlay = Make-DimShot $shot
     $g1 = Make-GreenLayer $mask
@@ -636,11 +565,8 @@ function Show-Settings($owner) {
 if ($NoGui) {
     if ($SourceFile) {
         $script:shot = New-Object System.Drawing.Bitmap $SourceFile
-        $script:diffShot = New-Object System.Drawing.Bitmap $SourceFile
     } else {
         $script:shot = Get-ScreenShot
-        Start-Sleep -Milliseconds 320
-        $script:diffShot = Get-ScreenShot
     }
     Build-Preview
     "k=$($script:k) size=$($script:shot.Width)x$($script:shot.Height) path=$($script:pathPercent)%"
@@ -683,7 +609,7 @@ $form.Controls.Add($status)
 $form.Controls.Add($pbOverlay)
 
 function Status-Text {
-    return ("K={0}  дорожка {1}%  |  серые - перекрыто; ЛКМ - точка; S - настройки; D - сетка; F5 - снимок; Esc - выход" -f $script:k, $script:pathPercent)
+    return ("K={0}  дорожка {1}%  |  ЛКМ - точка; S - настройки; D - сетка; F5 - снимок; Esc - выход" -f $script:k, $script:pathPercent)
 }
 
 function Update-Preview([bool]$recapture) {
@@ -691,17 +617,12 @@ function Update-Preview([bool]$recapture) {
         $form.Hide()
         Start-Sleep -Milliseconds 250
         $old = $script:shot
-        $oldDiff = $script:diffShot
         if ($SourceFile) {
             $script:shot = New-Object System.Drawing.Bitmap $SourceFile
-            $script:diffShot = New-Object System.Drawing.Bitmap $SourceFile
         } else {
             $script:shot = Get-ScreenShot
-            Start-Sleep -Milliseconds 320
-            $script:diffShot = Get-ScreenShot
         }
         if ($old) { $old.Dispose() }
-        if ($oldDiff) { $oldDiff.Dispose() }
         $form.Show()
         $form.Activate()
     }
@@ -717,15 +638,6 @@ function Test-Point([int]$ix, [int]$iy) {
     if ($ix -lt 0 -or $iy -lt 0 -or $ix -ge $fw -or $iy -ge $fh) { return "вне области" }
     if ($iy -lt $script:mt -or $iy -ge ($fh - $script:mb) -or $ix -ge ($fw - $script:mr)) {
         return ("x={0} y={1}: зона HUD (не анализируется)" -f $ix, $iy)
-    }
-    if ($script:dynArr) {
-        $dx = [int]($ix * $script:dynW / $fw)
-        $dy = [int]($iy * $script:dynH / $fh)
-        if ($dx -ge 0 -and $dy -ge 0 -and $dx -lt $script:dynW -and $dy -lt $script:dynH) {
-            if ($script:dynArr[$dy * $script:dynW + $dx]) {
-                return ("x={0} y={1}: закрыто (персонаж/эффект)" -f $ix, $iy)
-            }
-        }
     }
     $blocked = Test-MaskPixel $ix $iy
     if (-not $blocked -and $script:nearBuf) {
