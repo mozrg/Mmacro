@@ -1,0 +1,23 @@
+; Каталог карточек (благословений/проклятий) для автоголосования.
+; Названия собраны из коллекции Cards. Тиры I/II/III намеренно не указаны:
+; макрос отбрасывает номер тира у распознанного названия и сравнивает только
+; базовое имя карточки.
+; Каждое название — отдельной строкой. Пустые строки и строки с «;» в начале
+; пропускаются.
+Attack
+Boss Damage
+Double Attack
+Enemy Health
+Enemy Regen
+Enemy Shield
+Enemy Speed
+Explosive Deaths
+Plated Enemies
+Random Blessings
+Random Curses
+Range
+Resistant Enemies
+Spellproof Enemies
+Yen
+Active Cooldown
+Cooldown

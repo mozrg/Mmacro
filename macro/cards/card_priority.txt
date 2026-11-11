@@ -1,0 +1,18 @@
+; Приоритет карточек: сверху — самый высокий.
+Cooldown
+Attack
+Range
+Random Blessings
+Boss Damage
+Active Cooldown
+Yen
+Double Attack
+Enemy Health
+Enemy Regen
+Enemy Shield
+Enemy Speed
+Explosive Deaths
+Random Curses
+Plated Enemies
+Resistant Enemies
+Spellproof Enemies

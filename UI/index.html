@@ -700,6 +700,42 @@ html, body {
 .preset-item:hover { background: #1a1a1a; }
 .preset-item:last-child { border-bottom: none; }
 
+/* ---- Card priority list (модалка Card Voting) ---- */
+body.modal-only #modal-cards .modal-body { padding: 14px 18px; }
+.card-priority-list {
+    border: 1px solid #252525; border-radius: 8px;
+    max-height: 380px; overflow-y: auto; margin-top: 8px;
+    -ms-overflow-style: scrollbar;
+}
+.card-priority-empty {
+    padding: 16px; text-align: center; color: #666; font-size: 12px;
+}
+.card-priority-item {
+    display: -ms-flexbox; display: flex;
+    -ms-flex-align: center; align-items: center;
+    padding: 3px 8px; border-bottom: 1px solid #1a1a1a;
+    cursor: move;
+    line-height: 1.2;
+    background: #151515;
+    -webkit-user-select: none; -ms-user-select: none; user-select: none;
+}
+.card-priority-item:last-child { border-bottom: none; }
+.card-priority-item.dragging { opacity: 0.35; }
+.card-priority-handle {
+    color: #555; font-size: 11px; line-height: 1;
+    width: 14px; margin-right: 4px;
+    -ms-flex-negative: 0; flex-shrink: 0;
+}
+.card-priority-index {
+    color: #555; font: 10px 'Consolas', monospace;
+    width: 22px; -ms-flex-negative: 0; flex-shrink: 0;
+}
+.card-priority-name {
+    -ms-flex: 1; flex: 1; min-width: 0;
+    font-size: 12px; color: #ccc;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
 /* ---- Preset delete confirmation ---- */
 .preset-delete-confirm {
     position: absolute; left: 0; top: 0; right: 0; bottom: 0;
@@ -1060,6 +1096,17 @@ body.modal-only .modal-foot {
                     </label>
                     <button class="btn btn-ghost btn-sm" id="btnUpgradeCfg">
                         <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2"/><path d="M8 1.5v2M8 12.5v2M2.5 8h2M11.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                        <span data-i18n="configure">Configure</span>
+                    </button>
+                </div>
+                <div class="row between" style="margin-top:8px">
+                    <label class="check-label">
+                        <input type="checkbox" id="chkCardVote" class="check">
+                        <span class="check-custom"></span>
+                        <span data-i18n="cardVote">Card voting</span>
+                    </label>
+                    <button class="btn btn-ghost btn-sm" id="btnCardVoteCfg">
+                        <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M5 6.5h6M5 9.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
                         <span data-i18n="configure">Configure</span>
                     </button>
                 </div>
@@ -1493,6 +1540,53 @@ body.modal-only .modal-foot {
     </div>
 
     <!-- =============================================================
+         MODAL: Card Voting (Summer Event)
+         ============================================================= -->
+    <div class="modal" id="modal-cards">
+        <div class="modal-panel">
+            <div class="modal-head" id="dragHandle-cards">
+                <h2 class="modal-title" data-i18n="cardVoteTitle">Card Voting</h2>
+                <div class="modal-actions">
+                    <button class="modal-btn modal-min" data-min data-tip="Minimize" data-i18n-tip="minimize">
+                        <svg viewBox="0 0 16 16" fill="none"><path d="M3 13h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    </button>
+                    <button class="modal-btn modal-cls" data-close data-tip="Close" data-i18n-tip="close">
+                        <svg viewBox="0 0 16 16" fill="none"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc" data-i18n="cardVoteHint">Reads the three card names, ignores the I/II/III tier, checks card_catalog.txt and votes for the first matching card in card_priority.txt.</p>
+                <label class="check-label" style="margin-top:10px">
+                    <input type="checkbox" id="chkCardVoteEnabled" class="check">
+                    <span class="check-custom"></span>
+                    <span data-i18n="enableCardVote">Enable card voting</span>
+                </label>
+                <div class="field" style="margin-top:10px; max-width:220px;">
+                    <label class="field-label" data-i18n="cardVoteHotkey">Toggle card voting</label>
+                    <div class="hotkey-control">
+                        <input type="text" class="input hotkey-input" id="setCardVoteHotkey" value="F4" readonly autocomplete="off">
+                        <button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureCardVoteHotkey" data-i18n="recordKey">Record</button>
+                    </div>
+                </div>
+                <div class="row map-detect-actions" style="margin-top:10px;">
+                    <button class="btn btn-primary btn-sm" id="btnDetectCards" data-i18n="detectCards">Detect cards</button>
+                </div>
+                <div class="field-hint" id="cardDetectResult" style="margin-top:8px; color:#888;">&mdash;</div>
+                <fieldset class="fieldset" style="margin-top:12px">
+                    <legend class="fieldset-legend" data-i18n="cardPriority">Priority (top first)</legend>
+                    <div class="field-hint" data-i18n="cardPriorityHint">The macro ignores the I/II/III tier and votes for the first card in this list that appears on the screen. Drag cards to reorder.</div>
+                    <div class="card-priority-list" id="cardPriorityList"></div>
+                </fieldset>
+            </div>
+            <div class="modal-foot">
+                <button class="btn btn-ghost btn-sm" data-close data-i18n="cancel">Cancel</button>
+                <button class="btn btn-primary btn-sm" id="btnCardVoteSave" data-i18n="save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============================================================
          MODAL: Mark (slot marking + template drag-select)
          ============================================================= -->
     <div class="modal" id="modal-mark">
@@ -1888,6 +1982,11 @@ body.modal-only .modal-foot {
         if (inAHK) sendCmd('upgrade-cfg');
         else openModal('upgrade');
     });
+    on($('#chkCardVote'), 'change', function () { sendCmd('toggle-card-vote'); });
+    on($('#btnCardVoteCfg'), 'click', function () {
+        if (inAHK) sendCmd('card-vote-cfg');
+        else openModal('cards');
+    });
 
     // Bottom buttons — direct ID binding, no conditions
     var btnS = document.getElementById('btnSettings');
@@ -1969,6 +2068,17 @@ body.modal-only .modal-foot {
 	        var cb = document.getElementById('chkAutoUpgrade');
 	        if (cb) cb.checked = (enabled === true || enabled === 'true' || enabled == '1');
 	    };
+
+    window.ahkUpdateCardVote = function (enabled) {
+        var on = (enabled === true || enabled === 'true' || enabled == '1');
+        var side = document.getElementById('chkCardVote');
+        if (side) side.checked = on;
+        var modal = document.getElementById('chkCardVoteEnabled');
+        if (modal) modal.checked = on;
+    };
+    window.ahkSetCardVoteHotkey = function (value) {
+        setHotkeyInputValue(document.getElementById('setCardVoteHotkey'), value || 'F4');
+    };
 
     window.ahkUpdateCoords = function (up, st, rp, au) {
         currentCoords = [up || '', st || '', rp || '', au || ''];
@@ -2099,6 +2209,7 @@ body.modal-only .modal-foot {
             case 'presets':  initPresetsModal(m);  break;
             case 'calibrate': initCalibrateModal(m); break;
             case 'upgrade':  initUpgradeModal(m);  break;
+            case 'cards':    initCardVoteModal(m); break;
             case 'mark':     initMarkModal(m);     break;
             case 'snap':     initSnapModal(m);     break;
         }
@@ -2176,6 +2287,12 @@ body.modal-only .modal-foot {
             mapDetection: 'Map detection', mapDetectionHint: 'Windows OCR reads the title and checks it against map catalogs. The capture area includes long map names.',
             detectMap: 'Detect map', captureMapTitle: 'Capture title', mapTitleHint: 'If the title belongs to another mode, the macro will tell you which mode to select. OCR does not require separate title templates.',
             mapDetected: 'Detected', mapNotDetected: 'Not detected', mapOtherMode: 'Found in another mode', mapNoTitles: 'No title templates in this mode yet',
+            cardVote: 'Card voting', cardVoteTitle: 'Card Voting',
+            cardVoteHint: 'Reads the three card names, ignores the I/II/III tier, checks card_catalog.txt and votes for the first matching card in card_priority.txt.',
+            enableCardVote: 'Enable card voting', cardVoteHotkey: 'Toggle card voting',
+            detectCards: 'Detect cards', cardPriority: 'Priority (top first)',
+            cardPriorityHint: 'The macro ignores the I/II/III tier and votes for the first card in this list that appears on the screen. Drag cards to reorder.',
+            cardPriorityEmpty: 'Priority list is empty',
             logExpand: 'Expand log', logCollapse: 'Collapse log'
         },
         ru: {
@@ -2237,6 +2354,12 @@ body.modal-only .modal-foot {
             mapDetection: 'Распознавание карты', mapDetectionHint: 'Макрос читает заголовок через OCR и сверяет его с каталогами карт режимов. Область захватывает длинные названия целиком.',
             detectMap: 'Определить карту', captureMapTitle: 'Снять заголовок', mapTitleHint: 'Если карта относится к другому режиму, макрос подскажет, какой режим выбрать. Для OCR не нужно снимать отдельные шаблоны заголовков.',
             mapDetected: 'Определена', mapNotDetected: 'Не определена', mapOtherMode: 'Найдена в другом режиме', mapNoTitles: 'В этом режиме пока нет шаблонов заголовков',
+            cardVote: 'Голосование за карточки', cardVoteTitle: 'Голосование за карточки',
+            cardVoteHint: 'Макрос читает названия трёх карточек, игнорирует тир I/II/III, сверяет их с card_catalog.txt и голосует за первую подходящую карточку из card_priority.txt.',
+            enableCardVote: 'Включить проверку карточек', cardVoteHotkey: 'Вкл/выкл проверку карточек',
+            detectCards: 'Определить карточки', cardPriority: 'Приоритет (сверху важнее)',
+            cardPriorityHint: 'Тиры I/II/III игнорируются: макрос голосует за первую карточку из списка, которая есть на экране. Перетаскивайте строки, чтобы изменить порядок.',
+            cardPriorityEmpty: 'Список приоритета пуст',
             logExpand: 'Развернуть лог', logCollapse: 'Свернуть лог'
         }
     };
@@ -2325,7 +2448,7 @@ body.modal-only .modal-foot {
         }
         if (input && input.select) input.select();
         nativeHotkeyCapture = true;
-        var target = input && input.id === 'setRejoinHotkey' ? 'rejoin' : (input && input.id === 'setMapChangeHotkey' ? 'map-change' : (input && input.id === 'setMapDetectHotkey' ? 'map-detect' : 'farm'));
+        var target = input && input.id === 'setRejoinHotkey' ? 'rejoin' : (input && input.id === 'setMapChangeHotkey' ? 'map-change' : (input && input.id === 'setMapDetectHotkey' ? 'map-detect' : (input && input.id === 'setCardVoteHotkey' ? 'card-vote' : 'farm')));
         window.ahkCmd = 'record-hotkey/' + target;
     }
     function uiText(key, fallback) {
@@ -2402,11 +2525,12 @@ body.modal-only .modal-foot {
         if (typeof setFarmUI === 'function') setFarmUI(state.farming);
         if (window.ahkRejoinRecordState) window.ahkRejoinRecordState(rejoinRecordActive);
     };
-    window.ahkHotkeyCaptureFinished = function (farmKey, rejoinKey, mapChangeKey, mapDetectKey) {
+    window.ahkHotkeyCaptureFinished = function (farmKey, rejoinKey, mapChangeKey, mapDetectKey, cardVoteKey) {
         nativeHotkeyCapture = false;
         var overlay = document.getElementById('hotkeyCaptureOverlay');
         if (overlay) overlay.className = 'hotkey-capture-overlay';
         if (window.ahkSetHotkeys) window.ahkSetHotkeys(farmKey, rejoinKey, mapChangeKey, mapDetectKey);
+        if (cardVoteKey && window.ahkSetCardVoteHotkey) window.ahkSetCardVoteHotkey(cardVoteKey);
         if (activeHotkeyInput) stopHotkeyCapture();
     };
     window.ahkHotkeyCaptureCanceled = function () {
@@ -2419,7 +2543,7 @@ body.modal-only .modal-foot {
         nativeHotkeyCapture = true;
         var overlay = document.getElementById('hotkeyCaptureOverlay');
         var key = document.getElementById('hotkeyCaptureKey');
-        if (key) key.textContent = formatHotkeyLabel(value || (target === 'rejoin' ? currentRejoinRecordHotkey : (target === 'map-change' ? currentMapChangeHotkey : (target === 'map-detect' ? currentMapDetectHotkey : currentFarmHotkey))));
+        if (key) key.textContent = formatHotkeyLabel(value || (target === 'rejoin' ? currentRejoinRecordHotkey : (target === 'map-change' ? currentMapChangeHotkey : (target === 'map-detect' ? currentMapDetectHotkey : (target === 'card-vote' ? getHotkeyInputValue('#setCardVoteHotkey', 'F4') : currentFarmHotkey)))));
         if (overlay) overlay.className = 'hotkey-capture-overlay open';
     };
     window.ahkSetHotkeyCapture = function (value) {
@@ -2912,6 +3036,219 @@ var btnTestDc = document.getElementById('btnTestDisconnected');
         }
         var offEl = $('#upgYOffset');
         if (offEl) offEl.value = offset || '20';
+    };
+
+    /* ---- Card Voting Modal Init ---- */
+    var cardPriorityNames = [];
+    var cardCatalogNames = [];
+    var cardDragIndex = -1;
+    var cardDragActive = false;
+    var cardDragStartY = 0;
+    function splitCardList(value, sep) {
+        var out = [];
+        if (!value) return out;
+        var parts = String(value).split(sep);
+        for (var i = 0; i < parts.length; i++) {
+            var item = parts[i].replace(/^\s+|\s+$/g, '');
+            if (item) out.push(item);
+        }
+        return out;
+    }
+    function cardBaseKey(name) {
+        var s = String(name).toLowerCase().replace(/[^a-z\s]+/g, ' ');
+        s = s.replace(/[il]{1,3}\s*$/, '');
+        s = s.replace(/^\s+|\s+$/g, '');
+        return s.replace(/\s+/g, '');
+    }
+    function cardKeyIndex(arr, name) {
+        var key = cardBaseKey(name);
+        for (var i = 0; i < arr.length; i++) {
+            if (cardBaseKey(arr[i]) === key) return i;
+        }
+        return -1;
+    }
+    function reconcileCardPriority() {
+        if (!cardCatalogNames.length) return;
+        var result = [];
+        for (var i = 0; i < cardPriorityNames.length; i++) {
+            for (var j = 0; j < cardCatalogNames.length; j++) {
+                if (cardBaseKey(cardCatalogNames[j]) === cardBaseKey(cardPriorityNames[i])) {
+                    if (cardKeyIndex(result, cardCatalogNames[j]) === -1)
+                        result.push(cardCatalogNames[j]);
+                    break;
+                }
+            }
+        }
+        for (var k = 0; k < cardCatalogNames.length; k++) {
+            if (cardKeyIndex(result, cardCatalogNames[k]) === -1)
+                result.push(cardCatalogNames[k]);
+        }
+        cardPriorityNames = result;
+    }
+    function cardRowFromElement(tgt) {
+        var list = document.getElementById('cardPriorityList');
+        while (tgt && tgt !== list) {
+            var cls = ' ' + (tgt.className || '') + ' ';
+            if (cls.indexOf(' card-priority-item ') !== -1)
+                return tgt;
+            tgt = tgt.parentNode;
+        }
+        return null;
+    }
+    function cardRowFromEvent(e) {
+        e = e || window.event;
+        return cardRowFromElement(e.target || e.srcElement);
+    }
+    function cardDropAfter(row, e) {
+        var rect = row.getBoundingClientRect ? row.getBoundingClientRect() : null;
+        if (rect && typeof e.clientY === 'number')
+            return e.clientY > rect.top + rect.height / 2;
+        return false;
+    }
+    function renderCardPriorityList() {
+        var list = document.getElementById('cardPriorityList');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!cardPriorityNames.length) {
+            var empty = document.createElement('div');
+            empty.className = 'card-priority-empty';
+            empty.textContent = uiText('cardPriorityEmpty');
+            list.appendChild(empty);
+            return;
+        }
+        for (var i = 0; i < cardPriorityNames.length; i++) {
+            (function (index) {
+                var row = document.createElement('div');
+                row.className = 'card-priority-item' + ((cardDragActive && index === cardDragIndex) ? ' dragging' : '');
+                row.setAttribute('data-index', String(index));
+
+                var handle = document.createElement('span');
+                handle.className = 'card-priority-handle';
+                handle.textContent = '\u2261';
+
+                var num = document.createElement('span');
+                num.className = 'card-priority-index';
+                num.textContent = (index + 1) + '.';
+
+                var name = document.createElement('span');
+                name.className = 'card-priority-name';
+                name.textContent = cardPriorityNames[index];
+                name.setAttribute('title', cardPriorityNames[index]);
+
+                row.appendChild(handle);
+                row.appendChild(num);
+                row.appendChild(name);
+                list.appendChild(row);
+            })(i);
+        }
+    }
+    function initCardVoteModal(m) {
+        var list = document.getElementById('cardPriorityList');
+        if (list && !list.getAttribute('data-wired')) {
+            list.setAttribute('data-wired', '1');
+            on(list, 'mousedown', function (e) {
+                e = e || window.event;
+                if (e.button && e.button !== 1) return;
+                var row = cardRowFromEvent(e);
+                if (!row) return;
+                var index = parseInt(row.getAttribute('data-index'), 10);
+                if (isNaN(index)) return;
+                cardDragIndex = index;
+                cardDragStartY = (typeof e.clientY === 'number') ? e.clientY : 0;
+                cardDragActive = false;
+            });
+            on(document, 'mousemove', function (e) {
+                if (cardDragIndex < 0) return;
+                e = e || window.event;
+                if (!cardDragActive) {
+                    if (Math.abs(e.clientY - cardDragStartY) < 4) return;
+                    cardDragActive = true;
+                    renderCardPriorityList();
+                }
+                var el = document.elementFromPoint
+                    ? document.elementFromPoint(e.clientX, e.clientY)
+                    : (e.target || e.srcElement);
+                var row = cardRowFromElement(el);
+                if (!row) return;
+                var targetIndex = parseInt(row.getAttribute('data-index'), 10);
+                if (isNaN(targetIndex) || targetIndex === cardDragIndex) return;
+                var insertIndex = targetIndex + (cardDropAfter(row, e) ? 1 : 0);
+                if (cardDragIndex < insertIndex) insertIndex--;
+                if (insertIndex === cardDragIndex) return;
+                var item = cardPriorityNames.splice(cardDragIndex, 1)[0];
+                cardPriorityNames.splice(insertIndex, 0, item);
+                cardDragIndex = insertIndex;
+                renderCardPriorityList();
+                if (e.preventDefault) e.preventDefault();
+            });
+            on(document, 'mouseup', function () {
+                if (cardDragIndex < 0) return;
+                var changed = cardDragActive;
+                cardDragIndex = -1;
+                cardDragActive = false;
+                if (changed) renderCardPriorityList();
+            });
+            on(window, 'blur', function () {
+                if (cardDragIndex < 0) return;
+                cardDragIndex = -1;
+                cardDragActive = false;
+                renderCardPriorityList();
+            });
+        }
+
+        var btnDetect = document.getElementById('btnDetectCards');
+        if (btnDetect && !btnDetect.getAttribute('data-wired')) {
+            btnDetect.setAttribute('data-wired', '1');
+            on(btnDetect, 'click', function () {
+                var res = document.getElementById('cardDetectResult');
+                if (res) { res.textContent = uiText('loading'); res.style.color = '#888'; }
+                window.ahkCmd = 'card-detect';
+            });
+        }
+
+        var btnHotkey = document.getElementById('btnCaptureCardVoteHotkey');
+        if (btnHotkey && !btnHotkey.getAttribute('data-wired')) {
+            btnHotkey.setAttribute('data-wired', '1');
+            on(btnHotkey, 'click', function (e) {
+                e = e || window.event;
+                if (e.preventDefault) e.preventDefault();
+                startHotkeyCapture(document.getElementById('setCardVoteHotkey'), btnHotkey);
+            });
+        }
+
+        var btnSave = document.getElementById('btnCardVoteSave');
+        if (btnSave && !btnSave.getAttribute('data-wired')) {
+            btnSave.setAttribute('data-wired', '1');
+            on(btnSave, 'click', function () {
+                var chk = document.getElementById('chkCardVoteEnabled');
+                window.ahkCmd = 'card-save/'
+                    + ((chk && chk.checked) ? '1' : '0') + '/'
+                    + getHotkeyInputValue('#setCardVoteHotkey', 'F4') + '/'
+                    + encodeURIComponent(cardPriorityNames.join('|'));
+            });
+        }
+
+        renderCardPriorityList();
+    }
+    window.ahkLoadCardVote = function (enabled, hotkey, priorityStr, catalogStr, detectText) {
+        var chk = document.getElementById('chkCardVoteEnabled');
+        if (chk) chk.checked = (enabled === true || enabled === 'true' || enabled == '1');
+        setHotkeyInputValue(document.getElementById('setCardVoteHotkey'), hotkey || 'F4');
+        cardPriorityNames = splitCardList(priorityStr, '|');
+        cardCatalogNames = splitCardList(catalogStr, '|');
+        reconcileCardPriority();
+        var res = document.getElementById('cardDetectResult');
+        if (res && detectText) {
+            res.textContent = detectText;
+            res.style.color = '#888';
+        }
+        renderCardPriorityList();
+    };
+    window.ahkCardDetectResult = function (text, cls) {
+        var el = document.getElementById('cardDetectResult');
+        if (!el) return;
+        el.textContent = text || '\u2014';
+        el.style.color = (cls === 'error') ? '#ef4444' : ((cls === 'success') ? '#22c55e' : ((cls === 'warn') ? '#f59e0b' : '#888'));
     };
 
     /* ---- Post-Rejoin Actions bridge (called from AHK via PushModalData / execScript) ---- */

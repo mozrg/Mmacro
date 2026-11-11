@@ -4,6 +4,7 @@
 #Include %A_ScriptDir%\ahk\hotkeys.ahk
 #Include %A_ScriptDir%\ahk\maps.ahk
 #Include %A_ScriptDir%\ahk\map_ocr.ahk
+#Include %A_ScriptDir%\ahk\cards.ahk
 SetWorkingDir %A_ScriptDir%
 CoordMode, Mouse, Screen
 CoordMode, Pixel, Screen
@@ -276,6 +277,9 @@ ApplyConfiguredHotkeys()
 MigrateMapsLayout()
 ReloadMapList()
 LoadAllMapCoords()
+LoadCardCatalog()
+LoadCardPriority()
+UpdateCardVoteTimer()
 
 ; ===================== GUI (тёмная тема + HTML на всё окно) =====================
 Gui, +HwndMainGuiHwnd -Caption
@@ -365,6 +369,45 @@ if (BotAutoStart)
     SetTimer, StartDiscordBot, -1000
 ; Проверяем версию после загрузки интерфейса, чтобы обновление не мешало старту GUI.
 SetTimer, CheckForUpdate, -2000
+return
+
+; ===================== КАРТОЧКИ: ТАЙМЕР И ГОРЯЧАЯ КЛАВИША =====================
+CardVoteWatch:
+    if (!CardVoteEnabled || CardVoteBusy)
+        return
+    if (ModalHwnd && DllCall("IsWindow", "ptr", ModalHwnd))
+        return
+    if !WinExist(WinTitle)
+        return
+    if (A_TickCount < CardVoteCooldownUntil)
+        return
+    if (!IsCardVoteScreenVisible()) {
+        CardVoteArmed := true
+        CardVoteErrorLogged := false
+        return
+    }
+    if (!CardVoteArmed)
+        return
+    CardVoteArmed := false
+    CardVoteBusy := true
+    try {
+        RunCardVote()
+    } catch e {
+        AddLog("Карточки: ошибка " . e.Message . " (строка " . e.Line . ")", "error")
+    }
+    CardVoteBusy := false
+    if (CardVoteRetry) {
+        CardVoteArmed := true
+        CardVoteCooldownUntil := A_TickCount + 1500
+    }
+return
+
+CardVoteHotkeyAction:
+    ToggleCardVote()
+return
+
+StartOcrWorker:
+    EnsureOcrWorker()
 return
 
 #Include %A_ScriptDir%\ahk\version_check.ahk
@@ -511,6 +554,7 @@ LoadSettings() {
     global RejoinEnabled, RejoinShareLink, RejoinMaxAttempts, RejoinWaitTimeout, RejoinPostJoinDelay
     global RejoinPostActionsDelay, BotMapPostActionsDelay
     global BotToken, BotEnabled, BotAutoStart, BotGuildId, BotAllowedUserIds
+    global CardVoteEnabled
     if !FileExist(SettingsFile)
         return
     IniRead, v, %SettingsFile%, Delays, ClickDelay, %ClickDelay%
@@ -568,6 +612,9 @@ LoadSettings() {
     IniRead, v, %SettingsFile%, Game, Mode, %GameMode%
     GameMode := IsValidGameMode(v) ? v : "infinite"
 
+    IniRead, v, %SettingsFile%, CardVote, Enabled, %CardVoteEnabled%
+    CardVoteEnabled := (v = 1 || v = "true") ? true : false
+
     IniRead, v, %SettingsFile%, Rejoin, Enabled, %RejoinEnabled%
     RejoinEnabled := (v = 1 || v = "true") ? true : false
     IniRead, v, %SettingsFile%, Rejoin, ShareLink, %RejoinShareLink%
@@ -605,6 +652,7 @@ SaveSettings() {
     global RejoinEnabled, RejoinShareLink, RejoinMaxAttempts, RejoinWaitTimeout, RejoinPostJoinDelay
     global RejoinPostActionsDelay, BotMapPostActionsDelay
     global BotToken, BotEnabled, BotAutoStart, BotGuildId, BotAllowedUserIds
+    global CardVoteEnabled
     IniWrite, %ClickDelay%, %SettingsFile%, Delays, ClickDelay
     IniWrite, %SlotClickDelay%, %SettingsFile%, Delays, SlotClickDelay
     IniWrite, %UpgradeClickDelay%, %SettingsFile%, Delays, UpgradeClickDelay
@@ -629,6 +677,7 @@ SaveSettings() {
     IniWrite, % (AutoUpgradeEnabled ? 1 : 0), %SettingsFile%, AutoUpgrade, Enabled
     IniWrite, %FarmMode%, %SettingsFile%, Farm, Mode
     IniWrite, %GameMode%, %SettingsFile%, Game, Mode
+    IniWrite, % (CardVoteEnabled ? 1 : 0), %SettingsFile%, CardVote, Enabled
 
     IniWrite, % (RejoinEnabled ? 1 : 0), %SettingsFile%, Rejoin, Enabled
     IniWrite, %RejoinShareLink%, %SettingsFile%, Rejoin, ShareLink
@@ -1447,19 +1496,24 @@ CaptureGameArea(filepath) {
     ; иначе — главное окно AHK. GameAreaOrigin выбирает нужный HWND.
     if (!GameAreaOrigin(LastCaptureX, LastCaptureY)) {
         AddLog("CaptureGameArea: игровое окно недоступно")
-        return
+        return false
     }
     LastCaptureW := GameAreaW
     LastCaptureH := GameAreaH
-    CaptureScreenshot(LastCaptureX, LastCaptureY, LastCaptureW, LastCaptureH, filepath)
+    if (!CaptureScreenshot(LastCaptureX, LastCaptureY, LastCaptureW, LastCaptureH, filepath)) {
+        AddLog("CaptureGameArea: не удалось сохранить кадр", "error")
+        return false
+    }
     ; Если кадр вышел почти чёрным (игра свёрнута/не видна на экране) —
     ; пробуем PrintWindow по HWND игры
     if (IsMostlyBlack(filepath)) {
         AddLog("Захват экрана дал чёрный кадр, пробую PrintWindow...")
         if (CaptureGameWindow(filepath))
-            return
+            return true
         AddLog("PrintWindow тоже не дал кадр. Убедись, что Roblox встроен и виден на экране.")
+        return false
     }
+    return true
 }
 
 ; ---- Захват окна игры через PrintWindow (запасной вариант) ----
@@ -1483,7 +1537,10 @@ CaptureGameWindow(filepath) {
         DllCall("DeleteObject", "ptr", hBmp)
         return false
     }
-    SaveHBITMAPToBMP(hBmp, filepath, GameAreaW, GameAreaH)
+    if (!SaveHBITMAPToBMP(hBmp, filepath, GameAreaW, GameAreaH)) {
+        DllCall("DeleteObject", "ptr", hBmp)
+        return false
+    }
     DllCall("DeleteObject", "ptr", hBmp)
     return !IsMostlyBlack(filepath)
 }
@@ -1528,14 +1585,17 @@ CaptureForMarking(filepath) {
         DllCall("ShowWindow", "ptr", ModalHwnd, "int", 0)
         hidden := true
     }
-    ; Sleep чтобы DWM успел перерисовать без модального окна
-    Sleep, 150
+    ; Если модалку скрывали — даём DWM перерисовать кадр. Без модалки
+    ; не спим, чтобы не тратить время на каждом OCR.
+    if (hidden)
+        Sleep, 100
 
-    CaptureGameArea(filepath)
+    result := CaptureGameArea(filepath)
 
     ; Возвращаем модальное окно обратно
     if (hidden)
         DllCall("ShowWindow", "ptr", ModalHwnd, "int", 5)
+    return result
 }
 
 CaptureScreenshot(x, y, w, h, filepath) {
@@ -1549,8 +1609,9 @@ CaptureScreenshot(x, y, w, h, filepath) {
     DllCall("SelectObject", "ptr", hCaptureDC, "ptr", hOld)
     DllCall("DeleteDC", "ptr", hCaptureDC)
     DllCall("ReleaseDC", "ptr", 0, "ptr", hDesktopDC)
-    SaveHBITMAPToBMP(hBitmap, filepath, w, h)
+    ok := SaveHBITMAPToBMP(hBitmap, filepath, w, h)
     DllCall("DeleteObject", "ptr", hBitmap)
+    return ok
 }
 
 SaveHBITMAPToBMP(hBitmap, filepath, w, h) {
@@ -1573,13 +1634,28 @@ SaveHBITMAPToBMP(hBitmap, filepath, w, h) {
     fileSize := 14 + 40 + imageSize
     NumPut(fileSize, fh, 2, "UInt")
     NumPut(14 + 40, fh, 10, "UInt")
-    ; FileOpen "w" сам перезапишет файл; FileDelete перед этим опасен:
-    ; если между удалением и созданием произойдёт сбой, файл пропадёт.
+    ; FileOpen "w" сам перезапишет файл, но не сможет этого сделать, если
+    ; temp-файл остался с атрибутом ReadOnly (например, от старого запуска
+    ; или копирования). Снимаем атрибут и при необходимости пересоздаём файл.
+    if FileExist(filepath)
+        FileSetAttrib, -R, %filepath%
     file := FileOpen(filepath, "w")
+    if (!file) {
+        try {
+            FileDelete, %filepath%
+        } catch {
+        }
+        file := FileOpen(filepath, "w")
+    }
+    if (!file) {
+        AddLog("Не удалось открыть файл для записи: " . filepath, "error")
+        return false
+    }
     file.RawWrite(&fh, 14)
     file.RawWrite(&bi, 40)
     file.RawWrite(&pixels, imageSize)
     file.Close()
+    return true
 }
 
 ; ===================== РАЗМЕТКА СЛОТОВ КАРТЫ =====================
@@ -4494,6 +4570,14 @@ ProcessJSCmd(cmd) {
             AddLog("Auto Upgrade: OFF")
         return
     }
+    if (action = "toggle-card-vote") {
+        ToggleCardVote()
+        return
+    }
+    if (action = "card-vote-cfg") {
+        OpenModalWindow("cards", "Card Voting", 520, 640)
+        return
+    }
     if (action = "settings") {
         OpenModalWindow("settings", "Settings", 480, 660)
         return
@@ -4585,6 +4669,7 @@ ProcessJSCmd(cmd) {
 PushStateToHTML:
     global UpgradeX, UpgradeY, AutoX, AutoY, StartGameX, StartGameY, RepeatStageX, RepeatStageY
     global Embedded, Running, FarmRunCount, AutoUpgradeEnabled, MapList, SelectedMapCtl, AppLanguage, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
+    global CardVoteHotkey, CardVoteEnabled
     
     ; Сообщаем JS что мы в AHK-режиме (не standalone браузер)
     WBH_CallJS("ahkSetMode()")
@@ -4593,7 +4678,10 @@ PushStateToHTML:
     rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
     mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
     mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+    cardVoteHotkeyJS := JsEscape(CardVoteHotkey)
     WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+    WBH_CallJS("ahkSetCardVoteHotkey('" . cardVoteHotkeyJS . "')")
+    WBH_CallJS("ahkUpdateCardVote(" . (CardVoteEnabled ? "true" : "false") . ")")
     WBH_CallJS("ahkUpdateVersion('" . CURRENT_VERSION . "', false)")
     WBH_CallJS("ahkUpdateEmbed(" . (Embedded ? "true" : "false") . ")")
     WBH_CallJS("ahkUpdateFarm(" . (Running ? "true" : "false") . ")")
@@ -4732,10 +4820,10 @@ OpenModalWindow(name, title, w, h) {
 ; HTML-кнопка открывает настоящий AHK Hotkey-контрол. Он корректно
 ; распознаёт F-клавиши и комбинации даже во встроенном Shell.Explorer.
 ShowHotkeyCapture(target) {
-    global HotkeyCaptureTarget, HotkeyCaptureHwnd, HotkeyCaptureValue, HotkeyCaptureLastValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
-    HotkeyCaptureTarget := (target = "rejoin") ? "rejoin" : ((target = "map-change") ? "map-change" : ((target = "map-detect") ? "map-detect" : "farm"))
+    global HotkeyCaptureTarget, HotkeyCaptureHwnd, HotkeyCaptureValue, HotkeyCaptureLastValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey, CardVoteHotkey
+    HotkeyCaptureTarget := (target = "rejoin") ? "rejoin" : ((target = "map-change") ? "map-change" : ((target = "map-detect") ? "map-detect" : ((target = "card-vote") ? "card-vote" : "farm")))
     DisableConfiguredHotkeys()
-    initial := (HotkeyCaptureTarget = "rejoin") ? RejoinRecordHotkey : ((HotkeyCaptureTarget = "map-change") ? MapChangeRecordHotkey : ((HotkeyCaptureTarget = "map-detect") ? MapDetectHotkey : FarmHotkey))
+    initial := (HotkeyCaptureTarget = "rejoin") ? RejoinRecordHotkey : ((HotkeyCaptureTarget = "map-change") ? MapChangeRecordHotkey : ((HotkeyCaptureTarget = "map-detect") ? MapDetectHotkey : ((HotkeyCaptureTarget = "card-vote") ? CardVoteHotkey : FarmHotkey)))
     HotkeyCaptureLastValue := initial
 
     Gui, HotkeyCapture:Destroy
@@ -5031,6 +5119,13 @@ PollModalClose:
     else if (action = "upgrade-save") {
         GoSub, ModalSaveUpgrade
     }
+    ; ---- Карточки: проверка и сохранение приоритета ----
+    else if (action = "card-detect") {
+        RunCardDetectOnly()
+    }
+    else if (action = "card-save") {
+        SaveCardVoteSettings(arg)
+    }
     ; ---- Распознавание карты: карточка «Map detection» в настройках ----
     else if (action = "detect-map") {
         GoSub, MapDetectNow
@@ -5079,26 +5174,30 @@ PollModalClose:
 return
 
 HotkeyCaptureSave:
-    global HotkeyCaptureTarget, HotkeyCaptureValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
+    global HotkeyCaptureTarget, HotkeyCaptureValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey, CardVoteHotkey
     Gui, HotkeyCapture:Submit, NoHide
     captured := HotkeyCaptureValue
     if (captured = "") {
         AddLog("Горячая клавиша не выбрана", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "farm" && (captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey)) {
+    if (HotkeyCaptureTarget = "farm" && (captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey || captured = CardVoteHotkey)) {
         AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "rejoin" && (captured = FarmHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey)) {
+    if (HotkeyCaptureTarget = "rejoin" && (captured = FarmHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey || captured = CardVoteHotkey)) {
         AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "map-change" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapDetectHotkey)) {
+    if (HotkeyCaptureTarget = "map-change" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapDetectHotkey || captured = CardVoteHotkey)) {
         AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "map-detect" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey)) {
+    if (HotkeyCaptureTarget = "map-detect" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey || captured = CardVoteHotkey)) {
+        AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
+        return
+    }
+    if (HotkeyCaptureTarget = "card-vote" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey)) {
         AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
@@ -5109,6 +5208,8 @@ HotkeyCaptureSave:
         SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, captured, MapDetectHotkey)
     else if (HotkeyCaptureTarget = "map-detect")
         SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, captured)
+    else if (HotkeyCaptureTarget = "card-vote")
+        SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey, captured)
     else
         SetHotkeySettings(captured, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey)
     ApplyConfiguredHotkeys()
@@ -5117,8 +5218,9 @@ HotkeyCaptureSave:
     rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
     mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
     mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
-    WBH_CallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
-    ModalCallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+    cardVoteHotkeyJS := JsEscape(CardVoteHotkey)
+    WBH_CallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "','" . cardVoteHotkeyJS . "')")
+    ModalCallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "','" . cardVoteHotkeyJS . "')")
     Gui, HotkeyCapture:Destroy
 return
 
@@ -5243,6 +5345,19 @@ PushModalData(name) {
         }
         ModalCallJS("ahkLoadUpgradeCfg('" . prioStr . "'," . AutoUpgradeUnitOffsetY . ")")
     }
+    else if (name = "cards") {
+        ; Перечитываем файлы при каждом открытии: каталог и приоритет можно
+        ; править вручную, перезапуск макроса для этого не нужен.
+        LoadCardCatalog()
+        LoadCardPriority()
+        priorityStr := JoinArr(CardPriority, "|")
+        catalogStr := JoinArr(CardCatalog, "|")
+        ModalCallJS("ahkLoadCardVote(" . (CardVoteEnabled ? "true" : "false")
+            . ",'" . JsEscape(CardVoteHotkey) . "'"
+            . ",'" . JsEscape(priorityStr) . "'"
+            . ",'" . JsEscape(catalogStr) . "'"
+            . ",'" . JsEscape(CardLastDetectText) . "')")
+    }
     ; mark и snap: данные отправляются в OpenMarkGui / ShowSnapshotPreview,
     ; здесь дополнительно пушить нечего.
 }
@@ -5304,8 +5419,11 @@ ModalSaveSettings:
         rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
         mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
         mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+        cardVoteHotkeyJS := JsEscape(CardVoteHotkey)
         WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+        WBH_CallJS("ahkSetCardVoteHotkey('" . cardVoteHotkeyJS . "')")
         ModalCallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+        ModalCallJS("ahkSetCardVoteHotkey('" . cardVoteHotkeyJS . "')")
     }
     if (vals0 >= 36) {
         SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, vals36)
@@ -5315,8 +5433,11 @@ ModalSaveSettings:
         rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
         mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
         mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+        cardVoteHotkeyJS := JsEscape(CardVoteHotkey)
         WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+        WBH_CallJS("ahkSetCardVoteHotkey('" . cardVoteHotkeyJS . "')")
         ModalCallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+        ModalCallJS("ahkSetCardVoteHotkey('" . cardVoteHotkeyJS . "')")
     }
     if (vals0 >= 33) {
         BotEnabled := (vals29 = "1" || vals29 = "true") ? true : false
@@ -5363,6 +5484,41 @@ ModalSaveUpgrade:
     AutoUpgradeUnitOffsetY := offsetPart
     AddLog("Auto Upgrade settings saved from modal")
 return
+
+; ---- Сохранение настроек карточек из модального окна ----
+; arg = enabled/hotkey/URL-encoded priority list.
+SaveCardVoteSettings(arg) {
+    global CardVoteEnabled, CardPriority, CardVoteHotkey, CardVoteArmed, CardVoteErrorLogged, CardVoteCooldownUntil
+    global FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
+    StringSplit, p, arg, /
+    if (p0 < 3) {
+        AddLog("Карточки: некорректные данные настроек", "warn")
+        return
+    }
+    decoded := UriDecode(p3)
+    newPriority := []
+    for _, name in StrSplit(decoded, "|") {
+        name := Trim(name)
+        if (name != "")
+            newPriority.Push(name)
+    }
+    CardPriority := newPriority
+    SaveCardPriority(CardPriority)
+    CardVoteEnabled := (p1 = "1")
+    SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey, Trim(p2))
+    ApplyConfiguredHotkeys()
+    SaveSettings()
+    UpdateCardVoteTimer()
+    CardVoteArmed := true
+    CardVoteCooldownUntil := 0
+    CardVoteErrorLogged := false
+    WBH_CallJS("ahkUpdateCardVote(" . (CardVoteEnabled ? "true" : "false") . ")")
+    WBH_CallJS("ahkSetCardVoteHotkey('" . JsEscape(CardVoteHotkey) . "')")
+    SetTimer, PollModalClose, Off
+    Gui, Modal:Destroy
+    ModalHwnd := 0
+    AddLog("Карточки: настройки сохранены (в списке приоритета: " . CardPriority.Length() . ")", "success")
+}
 
 EndManualDrag(notifyUI := false) {
     global WinDragActive, WinDragLastMouseX, WinDragLastMouseY, WinDragLastTargetX, WinDragLastTargetY, WinDragMonitor, WB
@@ -5774,6 +5930,7 @@ RunUpdateScript_Inner(zipURL) {
     ; такими, какими их создал пользователь.
     script .= "    $protectedUpdatePaths = @(`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\maps')),`r`n"
+    script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\cards\\card_priority.txt')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\config.ini')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\ahk\\settings.ini')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\ahk\\presets.ini')),`r`n"
