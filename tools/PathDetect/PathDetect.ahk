@@ -233,7 +233,7 @@ StartWithUnit() {
 
         CoordMode, Mouse, Screen
         WinGetPos, gx, gy, gw, gh, ahk_id %hwnd%
-        MouseMove, gx + 1, gy + 1, 0
+        MouseMove, gx + 1, gy + 11, 0
         Sleep, 120
 
         Send, %PlaceKey%
