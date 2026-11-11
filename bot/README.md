@@ -1,7 +1,10 @@
 # Mmacro Discord bot
 
 Бот запускается макросом и читает токен из секции `[DiscordBot]` файла
-`macro/ahk/settings.ini`.
+`macro/ahk/secrets.ini`. Этот файл не коммитится: макрос создаёт его при
+сохранении настроек. Старые установки с токеном в `macro/ahk/settings.ini`
+продолжают работать, а при первом сохранении настроек токен переносится
+в `secrets.ini` и удаляется из `settings.ini`.
 
 ## Установка
 
@@ -25,6 +28,18 @@ bot/runtime/.venv/Scripts/python.exe -m pip install -r bot/requirements.txt
 
 После добавления приложения на Discord-сервер доступны `/screenshot`, `/runs`, `/maps` и `/map <имя>`.
 
-`GuildId` ускоряет появление slash-команд. Если `AllowedUserIds` заполнен, команды доступны только указанным Discord ID.
+`GuildId` ускоряет появление slash-команд и ограничивает их этим сервером. Команды доступны только Discord ID из `AllowedUserIds`: пока список пуст, бот отклоняет все команды, включая `/screenshot`.
 
-Токен является секретом: не публикуйте заполненный `macro/ahk/settings.ini`.
+Токен является секретом: не публикуйте `macro/ahk/secrets.ini`.
+
+## Проверка прав доступа
+
+Проверить правила доступа без подключения к Discord:
+
+```powershell
+python bot/test_auth.py
+```
+
+Скрипт проверяет, что пустой `AllowedUserIds` запрещает все команды, что чужие
+Discord ID и чужие серверы отклоняются и что токен читается из `secrets.ini`
+с откатом на `settings.ini`.

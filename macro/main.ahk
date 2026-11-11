@@ -1,8 +1,9 @@
 ﻿#SingleInstance Off
 #NoEnv
-#Include %A_ScriptDir%\ahk\drag_select.ahk
 #Include %A_ScriptDir%\ahk\language.ahk
 #Include %A_ScriptDir%\ahk\hotkeys.ahk
+#Include %A_ScriptDir%\ahk\maps.ahk
+#Include %A_ScriptDir%\ahk\map_ocr.ahk
 SetWorkingDir %A_ScriptDir%
 CoordMode, Mouse, Screen
 CoordMode, Pixel, Screen
@@ -38,11 +39,41 @@ GameAreaH := 720
 SidebarW  := 320
 
 MapsDir := A_ScriptDir . "\maps"
+; Игровые режимы: у каждого своя папка карт внутри maps\.
+GameModes := ["infinite", "raid", "summer"]
+GameModeLabels := {infinite: "Infinite", raid: "Raid", summer: "Summer Event"}
+GameMode := "infinite"
+
+; ---- Распознавание названия карты (координаты игровой области) ----
+; В этой области на экране загрузки находится только название карты.
+DetectTitleX := 20
+DetectTitleY := 55
+DetectTitleW := 1100
+DetectTitleH := 75
+OcrScriptPath := A_ScriptDir . "\ocr_title.ps1"
+OcrCapturePath := A_Temp . "\mmacro_title_ocr.bmp"
+DetectTitleTolerance := 30   ; допуск сравнения по каждому каналу (0-255)
+DetectTitleThreshold := 85   ; минимальный % совпадения, чтобы считать карту определённой
+DetectTitleCaptureThreshold := 60 ; порог автоподстановки карты при захвате; для определения в UI остаётся 85
+DetectTitleRoam := 20        ; на сколько пикселей искать заголовок вокруг сохранённой точки
+DetectTitleCoarseStep := 4   ; шаг грубого прохода по этой области
+DetectTitleFineRoam := 2     ; уточнение положения шагом 1 px (грубая сетка ±2 покрывает)
+TitleCaptureMap := ""        ; карта, для которой сейчас снимается заголовок
+TitleTemplates := []         ; кэш загруженных шаблонов заголовков
+TitleTplPixels := ""       ; пиксели шаблона, который сравнивается сейчас
+TitleTemplatesMode := ""     ; режим, для которого построен кэш
+DetectBandBuf := ""          ; пиксели полосы кадра, где ищем заголовок
+DetectBandW := 0
+DetectBandH := 0
+DetectBandStride := 0
+LastDetectedMap := ""
+LastDetectScore := 0
 ImagesDir := A_ScriptDir . "\images"
 LogoDir := A_ScriptDir . "\logo"
 LogoIconFile := LogoDir . "\mmacro.ico"
 ConfigFile := A_ScriptDir . "\config.ini"
 SettingsFile := A_ScriptDir . "\ahk\settings.ini"
+SecretsFile := A_ScriptDir . "\ahk\secrets.ini"   ; не коммитится: токен Discord-бота
 PresetsIni := A_ScriptDir . "\ahk\presets.ini"
 TempShot := A_ScriptDir . "\_preview.bmp"
 
@@ -114,7 +145,7 @@ IfNotExist, %MapsDir%
 IfNotExist, %ImagesDir%
     FileCreateDir, %ImagesDir%
 
-MapList := []      ; Список карт: имена формируются из снимков в maps\*.bmp
+MapList := []      ; Имена карт берутся из общего каталога, файлы карт — необязательны
 MapCoords := {}   ; MapCoords[map] := [{num,x,y}, ...]
 
 ; Координаты кнопок (калибруются кликом по скриншоту)
@@ -194,17 +225,14 @@ MarkList := []
 TemplateName := ""   ; заранее заданное имя шаблона (например "StartGame") или "" = спрашивать
 ModalHwnd := 0
 
-; ---- drag-select для захвата шаблонов ----
-DragActive := false
-DragStartSX := 0, DragStartSY := 0
-DragCurSX := 0, DragCurSY := 0
-DragPrevRect := ""
-DragOverlayHwnd := 0
-
 ; ---- ручной перенос окна (ManualDragLoop) ----
 WinDragActive := false
 WinDragStartMX := 0, WinDragStartMY := 0
 WinDragStartWX := 0, WinDragStartWY := 0
+WinDragLastMouseX := "", WinDragLastMouseY := ""
+WinDragLastTargetX := "", WinDragLastTargetY := ""
+WinDragMonitor := 0
+WinDragWorkLeft := 0, WinDragWorkTop := 0, WinDragWorkRight := 0, WinDragWorkBottom := 0
 
 ; ---- запись действий после Rejoin (Post-Rejoin Actions) ----
 RejoinRecordActive := false
@@ -230,7 +258,6 @@ Hotkey, ~WheelDown, RejoinWheelDown, Off
 ; ему фокус по клику. Глобальный перехват LButton здесь не нужен и мог
 ; мешать кликам по HTML-панели после закрепления.
 Hotkey, ~LButton, FocusEmbeddedGameClick, Off
-; Функции OnTemplateLButtonDown/Move/Up оставлены в drag_select.ahk как запасные заглушки.
 ; =======================================================
 
 ; Главное окно AHK = ТОЛЬКО боковая панель (сайдбар).
@@ -246,6 +273,7 @@ LoadSettings()
 LoadAppLanguage()
 LoadHotkeySettings()
 ApplyConfiguredHotkeys()
+MigrateMapsLayout()
 ReloadMapList()
 LoadAllMapCoords()
 
@@ -294,7 +322,7 @@ try {
 }
 
 if !FileExist(htmlPath) {
-    MsgBox, 16, index.html не найден, Не удалось найти UI\index.html.`n`nПроверенные пути:`n%htmlPath%`n`nПоложи index.html/script.js/style.css рядом с main.ahk в подпапку UI, либо смотри файл _last_loaded_html_path.txt рядом с main.ahk.
+    MsgBox, 16, index.html не найден, Не удалось найти UI\index.html.`n`nПроверенные пути:`n%htmlPath%`n`nПоложи index.html рядом с main.ahk в подпапку UI, либо смотри файл _last_loaded_html_path.txt рядом с main.ahk.
 }
 
 Gui, Add, ActiveX, x0 y0 w%SidebarTotalW% h%SidebarTotalH% vWB, Shell.Explorer
@@ -302,7 +330,7 @@ WB.Silent := true
 ComObjConnect(WB, "WB_")
 ; Flags=12 (4+8) — navNoReadFromCache|navNoWriteToCache: заставляет IE ActiveX
 ; всегда брать файл заново с диска, а не отдавать закэшированную версию
-; (это была вероятная причина, почему после замены index.html/script.js
+; (это была вероятная причина, почему после замены index.html
 ; в приложении продолжал грузиться старый контент).
 WB.Navigate(htmlURL . "?_=" . A_TickCount, 12)
 
@@ -537,6 +565,9 @@ LoadSettings() {
     IniRead, v, %SettingsFile%, Farm, Mode, %FarmMode%
     FarmMode := (v = "autoplay") ? "autoplay" : "units"
 
+    IniRead, v, %SettingsFile%, Game, Mode, %GameMode%
+    GameMode := IsValidGameMode(v) ? v : "infinite"
+
     IniRead, v, %SettingsFile%, Rejoin, Enabled, %RejoinEnabled%
     RejoinEnabled := (v = 1 || v = "true") ? true : false
     IniRead, v, %SettingsFile%, Rejoin, ShareLink, %RejoinShareLink%
@@ -554,8 +585,7 @@ LoadSettings() {
     if (BotMapPostActionsDelay < 0)
         BotMapPostActionsDelay := 0
 
-    IniRead, v, %SettingsFile%, DiscordBot, Token, %BotToken%
-    BotToken := (v = "ERROR") ? "" : v
+    BotToken := LoadBotToken()
     IniRead, v, %SettingsFile%, DiscordBot, Enabled, %BotEnabled%
     BotEnabled := (v = 1 || v = "true") ? true : false
     IniRead, v, %SettingsFile%, DiscordBot, AutoStart, %BotAutoStart%
@@ -598,6 +628,7 @@ SaveSettings() {
     IniWrite, %AutoUpgradeUnitOffsetY%, %SettingsFile%, AutoUpgrade, UnitOffsetY
     IniWrite, % (AutoUpgradeEnabled ? 1 : 0), %SettingsFile%, AutoUpgrade, Enabled
     IniWrite, %FarmMode%, %SettingsFile%, Farm, Mode
+    IniWrite, %GameMode%, %SettingsFile%, Game, Mode
 
     IniWrite, % (RejoinEnabled ? 1 : 0), %SettingsFile%, Rejoin, Enabled
     IniWrite, %RejoinShareLink%, %SettingsFile%, Rejoin, ShareLink
@@ -606,7 +637,7 @@ SaveSettings() {
     IniWrite, %RejoinPostJoinDelay%, %SettingsFile%, Rejoin, PostJoinDelay
     IniWrite, %RejoinPostActionsDelay%, %SettingsFile%, Rejoin, PostActionsDelay
     IniWrite, %BotMapPostActionsDelay%, %SettingsFile%, DiscordBot, MapPostActionsDelay
-    IniWrite, %BotToken%, %SettingsFile%, DiscordBot, Token
+    SaveBotToken()
     IniWrite, % (BotEnabled ? 1 : 0), %SettingsFile%, DiscordBot, Enabled
     IniWrite, % (BotAutoStart ? 1 : 0), %SettingsFile%, DiscordBot, AutoStart
     IniWrite, %BotGuildId%, %SettingsFile%, DiscordBot, GuildId
@@ -614,23 +645,121 @@ SaveSettings() {
     SaveHotkeySettings()
 }
 
+; ---- Токен Discord-бота: только в ahk\secrets.ini ----
+; settings.ini лежит в git, поэтому секрет туда не пишется. Старые установки
+; читаются как fallback, а при первом сохранении токен переносится в secrets.ini.
+LoadBotToken() {
+    global SecretsFile, SettingsFile
+    IniRead, v, %SecretsFile%, DiscordBot, Token, ""
+    if (v != "ERROR" && Trim(v) != "")
+        return Trim(v)
+    IniRead, v, %SettingsFile%, DiscordBot, Token, ""
+    if (v = "ERROR")
+        return ""
+    return Trim(v)
+}
+
+SaveBotToken() {
+    global SecretsFile, SettingsFile, BotToken
+    if (BotToken = "") {
+        IniDelete, %SecretsFile%, DiscordBot, Token
+        IniDelete, %SettingsFile%, DiscordBot, Token
+        return
+    }
+    ; Файл пишется явно в UTF-8: IniWrite для нового файла может выбрать UTF-16,
+    ; а bot.py читает его как utf-8-sig.
+    FileDelete, %SecretsFile%
+    f := FileOpen(SecretsFile, "w", "UTF-8")
+    if (!f) {
+        AddLog("Не удалось записать " . SecretsFile . " — токен не сохранён", "error")
+        return
+    }
+    f.Write("[DiscordBot]`r`nToken=" . BotToken . "`r`n")
+    f.Close()
+    ; Если токен остался в отслеживаемом файле, убираем его оттуда.
+    IniDelete, %SettingsFile%, DiscordBot, Token
+}
+
 ; ===================== КООРДИНАТЫ КАРТ (слоты) =====================
-SafeMapName(name) {
-    n := name
-    StringReplace, n, n, %A_Space%, _, All
-    StringReplace, n, n, ', , All
-    return n
-}
-
-MapSlotsFile(mapName) {
-    global MapsDir
-    return MapsDir . "\" . SafeMapName(mapName) . "_slots.ini"
-}
-
+; Единственное правило имени файла для карты: им же пользуются слоты, записанные
+; действия и папка bot\actions. Поэтому снимок карты и его *_slots.ini всегда
+; получают одно и то же базовое имя.
+; Базовое имя файлов карты: имя карты без символов, недопустимых в имени файла.
+; Одно правило для снимка, заголовка, слотов и записанных действий, поэтому
+; то, что видно в списке карт, совпадает с именем файлов в maps\<режим>.
+; Имя, которое использовали прошлые версии макроса (пробелы -> "_", апостроф
+; удалялся). Нужно только для чтения уже записанных файлов.
+; Путь к файлу-спутнику карты. Если канонического имени нет, но есть файл под
+; старым именем — возвращается он, иначе разметка прошлых версий потерялась бы.
 ; ---- Файл с Post-Rejoin Actions для конкретной карты ----
-RejoinActionsFile(mapName) {
-    global MapsDir
-    return MapsDir . "\" . SafeMapName(mapName) . "_rejoin.ini"
+; ---- Шаблон заголовка карты для распознавания ----
+; Существующий шаблон (.bmp, затем .png) или "" если его ещё не снимали.
+; ===================== РАСПОЗНАВАНИЕ КАРТЫ ПО ЗАГОЛОВКУ =====================
+; На экране "Travelling to..." название карты рисуется всегда в одном и том же
+; месте, поэтому шаблон сравнивается не скользящим поиском, а по сохранённой
+; позиции (с небольшим разбросом). Сравниваются только пиксели текста, так что
+; фон-превью карты на результат не влияет.
+
+; Читает 24-битный BMP в буфер пикселей, приводя строки к порядку «сверху вниз».
+; Светло-синий пиксель — из таких нарисован текст заголовка.
+; Точки заголовка для сравнения: пиксели текста, у которых рядом есть фон.
+; Берём именно контуры букв: тогда сравнение не зависит от того, что нарисовано
+; под заголовком (превью карты у каждой карты своё), и точек заметно меньше.
+; Загружает шаблоны заголовков активного режима в кэш.
+; Доля точек шаблона, совпавших с полосой кадра при смещении (dx, dy), в %.
+; Кадр хранится в глобальном буфере: параметры передаются адресами, потому что
+; NumGet по свойству объекта в AHK v1 трактует значение как адрес.
+; Сравнивает заголовок на экране со всеми шаблонами режима.
+; Возвращает true, если лучший результат не ниже порога.
+; Сообщает результат распознавания в панель и в открытые модалки.
+PushMapDetectResult(mapName, score, otherMap := "", otherMode := "") {
+    global LastDetectedMap, LastDetectScore
+    LastDetectedMap := mapName
+    LastDetectScore := score + 0
+    js := "ahkMapDetectResult('" . JsEscape(mapName) . "'," . LastDetectScore . ",'" . JsEscape(otherMap) . "','" . JsEscape(otherMode) . "')"
+    WBH_CallJS(js)
+    ModalCallJS(js)
+}
+
+; Сохраняет шаблон заголовка выбранной карты и его позицию в кадре.
+SaveMapTitle(x1, y1, x2, y2) {
+    global SelectedMapCtl, TempShot, TitleCaptureMap, MapCoords, RejoinActions
+    name := (TitleCaptureMap != "") ? TitleCaptureMap : SelectedMapCtl
+    TitleCaptureMap := ""
+    if (name = "") {
+        AddLog("Шаблон заголовка не сохранён: карта не выбрана", "warn")
+        return false
+    }
+    w := x2 - x1 + 1
+    h := y2 - y1 + 1
+    if (w < 40 || h < 16) {
+        AddLog("Заголовок слишком мелкий (" w "x" h ") — обведи весь текст названия", "warn")
+        return false
+    }
+    out := MapTitlePath(name)
+    if !CropBMP(TempShot, x1, y1, w, h, out) {
+        AddLog("Не удалось сохранить шаблон заголовка", "error")
+        return false
+    }
+    anchor := MapTitleAnchorPath(name)
+    IniWrite, %x1%, %anchor%, Title, X
+    IniWrite, %y1%, %anchor%, Title, Y
+    IniWrite, %w%, %anchor%, Title, W
+    IniWrite, %h%, %anchor%, Title, H
+    InvalidateTitleTemplates()
+    ; Карта могла быть новой — тогда она появляется в списке и сразу выбирается.
+    ReloadMapList()
+    if (SelectedMapCtl != name) {
+        SelectedMapCtl := name
+        if !MapCoords.HasKey(name)
+            LoadMapCoordsOne(name)
+        RejoinActions := []
+        LoadRejoinActions(name)
+        RefreshMapDropdown()
+        WriteBotState()
+    }
+    AddLog("Шаблон заголовка сохранён: " . out . " (" w "x" h " в " x1 "," y1 ")", "success")
+    return true
 }
 
 ; ---- Загрузка записанных Post-Rejoin действий для карты ----
@@ -684,25 +813,81 @@ LoadAllMapCoords() {
         LoadMapCoordsOne(m)
 }
 
-; Сбор списка карт из сохранённых снимков (maps\*.bmp).
-; Имя карты = имя файла без расширения.
+; Сбор списка карт активного режима: сначала единый каталог названий,
+; затем файлы-карты для обратной совместимости.
 ReloadMapList() {
-    global MapList, MapsDir
+    global MapList, GameMode
     MapList := []
+    dir := ModeDir()
+    if !InStr(FileExist(dir), "D")
+        FileCreateDir, %dir%
+
+    ; The catalog supplies selectable names before their title or snapshot exists.
+    ; Existing assets are also appended for backwards compatibility.
     seen := {}
-    Loop, Files, %MapsDir%\*.bmp
-    {
-        name := A_LoopFileName
-        StringGetPos, dotPos, name, .
-        if (dotPos >= 0)
-            name := SubStr(name, 1, dotPos)
-        name := Trim(name)
-        StringLower, key, name
-        if (name = "" || seen.HasKey(key))
-            continue
-        seen[key] := true
-        MapList.Push(name)
+    if LoadMapCatalog(GameMode, catalogNames) {
+        for _, name in catalogNames {
+            name := Trim(name)
+            StringLower, key, name
+            if (name = "" || seen.HasKey(key))
+                continue
+            seen[key] := true
+            MapList.Push(name)
+        }
+    } else if (GameMode = "infinite")
+        AddLog("Каталог карт не найден: " . MapsDir . "\map_catalog.txt", "warn")
+    if !InStr(FileExist(dir), "D")
+        return
+    for _, pattern in ["\*_title.bmp", "\*_title.png", "\*.bmp", "\*.png"] {
+        Loop, Files, %dir%%pattern%
+        {
+            name := A_LoopFileName
+            StringGetPos, dotPos, name, .
+            if (dotPos >= 0)
+                name := SubStr(name, 1, dotPos)
+            name := RegExReplace(name, "i)_title$", "")
+            name := Trim(name)
+            StringLower, key, name
+            if (name = "" || seen.HasKey(key))
+                continue
+            seen[key] := true
+            MapList.Push(name)
+        }
     }
+}
+
+; Разовая миграция: карты, лежавшие прямо в maps\, переезжают в maps\infinite.
+; Новые версии хранят карты по папкам режимов.
+MigrateMapsLayout() {
+    global MapsDir
+    flat := 0
+    Loop, Files, %MapsDir%\*.bmp
+        flat += 1
+    if (flat = 0)
+        return
+    target := MapsDir . "\infinite"
+    if !InStr(FileExist(target), "D")
+        FileCreateDir, %target%
+    moved := 0
+    for _, pattern in ["\*.bmp", "\*.png", "\*_slots.ini", "\*_rejoin.ini"] {
+        Loop, Files, %MapsDir%%pattern%
+        {
+            dest := target . "\" . A_LoopFileName
+            if FileExist(dest)
+                continue
+            FileMove, %A_LoopFileFullPath%, %dest%
+            if (!ErrorLevel)
+                moved += 1
+        }
+    }
+    if (moved > 0)
+        AddLog("Карты: перенесено " . moved . " файл(ов) в maps\infinite", "success")
+}
+
+; Подпись режима для лога и бота.
+GameModeLabel(mode) {
+    global GameModeLabels
+    return GameModeLabels.HasKey(mode) ? GameModeLabels[mode] : mode
 }
 
 ; Перестроение списка карт в HTML-панели (с сохранением выбора).
@@ -785,6 +970,25 @@ GetClientSize(hwnd, ByRef cw, ByRef ch) {
     DllCall("GetClientRect", "ptr", hwnd, "ptr", &rect)
     cw := NumGet(rect, 8, "Int")
     ch := NumGet(rect, 12, "Int")
+}
+
+GetWorkAreaAtPoint(x, y, ByRef cachedMonitor, ByRef left, ByRef top, ByRef right, ByRef bottom) {
+    point := (x & 0xFFFFFFFF) | ((y & 0xFFFFFFFF) << 32)
+    monitor := DllCall("MonitorFromPoint", "int64", point, "uint", 2, "ptr")
+    if (!monitor)
+        return false
+    if (monitor = cachedMonitor)
+        return true
+    VarSetCapacity(info, 40, 0)
+    NumPut(40, info, 0, "UInt")
+    if (!DllCall("GetMonitorInfo", "ptr", monitor, "ptr", &info))
+        return false
+    left := NumGet(info, 4, "Int")
+    top := NumGet(info, 8, "Int")
+    right := NumGet(info, 12, "Int")
+    bottom := NumGet(info, 16, "Int")
+    cachedMonitor := monitor
+    return true
 }
 
 ; ===================== ПОИСК ИЗОБРАЖЕНИЙ (fallback) =====================
@@ -1078,6 +1282,103 @@ BtnClearMap:
     AddLog("Разметка карты """ SelectedMapCtl """ очищена")
 return
 
+; ===================== РЕЖИМ И РАСПОЗНАВАНИЕ КАРТЫ =====================
+; Кнопка в настройках: показывает, какую карту макрос видит на экране
+; "Travelling to...". Заодно переключает панель на эту карту — так удобно
+; проверять, что разметка и записанные действия относятся к нужной карте.
+MapDetectNow:
+    if !WinExist(WinTitle) {
+        AddLog("Проверка карты: окно Roblox не найдено", "warn")
+        PushMapDetectResult("", 0)
+        return
+    }
+    ; Модалка настроек может закрывать угол с заголовком — прячем её на время
+    ; захвата кадра, иначе макрос увидит собственное окно вместо игры.
+    hidden := false
+    if (ModalHwnd && DllCall("IsWindow", "ptr", ModalHwnd) && DllCall("IsWindowVisible", "ptr", ModalHwnd)) {
+        DllCall("ShowWindow", "ptr", ModalHwnd, "int", 0)
+        hidden := true
+        Sleep, 150
+    }
+    detected := DetectMapTitle(foundMap, foundScore, true)
+    if (hidden)
+        DllCall("ShowWindow", "ptr", ModalHwnd, "int", 5)
+    if (detected) {
+        AddLog("Определена карта: " foundMap " (" foundScore "%)", "success")
+        PushMapDetectResult(foundMap, foundScore)
+        if (foundMap != SelectedMapCtl) {
+            SelectedMapCtl := foundMap
+            RefreshMapDropdown()
+            Gosub, MapChanged
+            AddLog("Панель переключена на """ foundMap """")
+        }
+    } else {
+        if (DetectedOtherMode != "")
+            AddLog("Карта " . foundMap . " найдена в режиме " . DetectedOtherMode . ", выбери этот режим", "warn")
+        else
+            AddLog("Карта не найдена в каталоге выбранного режима", "warn")
+        PushMapDetectResult("", foundScore, foundMap, DetectedOtherMode)
+    }
+return
+
+; Снятие шаблона заголовка: всегда доступно, даже если карта ещё не распознана.
+MapCaptureTitle:
+    if !WinExist(WinTitle) {
+        AddLog("Окно Roblox не найдено — открой игру и экран «Travelling to...»", "warn")
+        return
+    }
+    name := SelectedMapCtl
+    if (name = "") {
+        InputBox, name, Название карты, Введи название карты для нового шаблона:`n`nОставь Roblox на экране «Travelling to...». ,, 360, 150
+        if (ErrorLevel || Trim(name) = "") {
+            AddLog("Снятие заголовка отменено: название карты не указано", "warn")
+            return
+        }
+        name := MapFileBase(name)
+        if (name = "") {
+            AddLog("Снятие заголовка отменено: некорректное название карты", "warn")
+            return
+        }
+    }
+    TitleCaptureMap := name
+    CaptureForMarking(TempShot)
+    MarkMode := "maptitle"
+    MarkList := []
+    OpenMarkGui("Обведи название карты """ name """ на скриншоте — от левого края первой буквы до правого края последней. Отпусти мышь, шаблон сохранится.")
+return
+
+; Смена режима: список карт и разметка перечитываются из maps\<режим>.
+SelectGameMode(modeName) {
+    global GameMode, SelectedMapCtl, PendingMapChange, MapCoords, MapList, Running
+    if (!IsValidGameMode(modeName)) {
+        AddLog("Неизвестный режим: " . modeName, "warn")
+        WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
+        return
+    }
+    if (Running) {
+        AddLog("Сначала останови фарм, чтобы сменить режим", "warn")
+        WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
+        return
+    }
+    if (modeName = GameMode) {
+        WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
+        return
+    }
+    GameMode := modeName
+    SelectedMapCtl := ""
+    PendingMapChange := ""
+    MapCoords := {}
+    InvalidateTitleTemplates()
+    SaveSettings()
+    ReloadMapList()
+    LoadAllMapCoords()
+    RefreshMapDropdown()
+    WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
+    WBH_CallJS("ahkUpdateMap('')")
+    WriteBotState()
+    AddLog("Режим: " . GameModeLabel(GameMode) . " (карт: " . MapList.Length() . ")", "success")
+}
+
 ; ===================== СНИМОК КАРТЫ =====================
 BtnCaptureMap:
     if !WinExist(WinTitle) {
@@ -1102,20 +1403,30 @@ ShowSnapshotPreview() {
 
 SnapConfirm:
     ; SnapName приходит из HTML-модалки (поле ввода), SnapName задан в PollModalClose
+    global TempShot, SelectedMapCtl
     if (SnapName = "") {
         AddLog("Имя не указано, снимок не сохранён")
         return
     }
-    FinalPath := MapsDir . "\" . SnapName . ".bmp"
-    global TempShot
+    ; Имя карты = имя файла снимка. Недопустимые символы заменяются, иначе
+    ; FileCopy молча не сработает и карта не появится в списке.
+    MapName := MapFileBase(SnapName)
+    if (MapName = "") {
+        AddLog("Имя карты пустое после замены недопустимых символов", "warn")
+        return
+    }
+    FinalPath := ModeDir() . "\" . MapName . ".bmp"
     FileCopy, %TempShot%, %FinalPath%, 1
-    AddLog("Снимок карты сохранён: maps\" . SnapName . ".bmp")
+    if (ErrorLevel) {
+        AddLog("Не удалось сохранить снимок: " . FinalPath, "error")
+        return
+    }
+    AddLog("Снимок карты сохранён: " . FinalPath)
     ; Появляется в списке карт сразу после сохранения снимка
     ReloadMapList()
-    global SelectedMapCtl
-    SelectedMapCtl := SnapName
+    SelectedMapCtl := MapName
     RefreshMapDropdown()
-    AddLog("Карта """ . SnapName . """ добавлена в список")
+    AddLog("Карта """ . MapName . """ добавлена в список")
     ; Закрываем модалку снимка
     SetTimer, PollModalClose, Off
     Gui, Modal:Destroy
@@ -1274,8 +1585,10 @@ SaveHBITMAPToBMP(hBitmap, filepath, w, h) {
 ; ===================== РАЗМЕТКА СЛОТОВ КАРТЫ =====================
 BtnMarkSlots:
     Gui, Submit, NoHide
+    if (SelectedMapCtl = "")
+        Gosub, MapDetectNow
     if (SelectedMapCtl = "") {
-        AddLog("Сначала выбери карту в списке")
+        AddLog("Карта не определена автоматически. Открой экран Travelling to... и повтори разметку", "warn")
         return
     }
     if !WinExist(WinTitle) {
@@ -1366,13 +1679,19 @@ BtnCaptureStartGame:
 return
 
 SaveTemplateRegion(x1, y1, x2, y2) {
-    global TempShot, ImagesDir, TemplateName
+    global TempShot, ImagesDir, TemplateName, MarkMode
     ; Нормализуем углы
     if (x1 > x2) {
         t := x1, x1 := x2, x2 := t
     }
     if (y1 > y2) {
         t := y1, y1 := y2, y2 := t
+    }
+    ; Шаблон заголовка карты: сохраняется в maps\<режим>\<карта>_title.bmp.
+    if (MarkMode = "maptitle") {
+        MarkMode := ""
+        SaveMapTitle(x1, y1, x2, y2)
+        return
     }
     w := x2 - x1 + 1
     h := y2 - y1 + 1
@@ -1463,11 +1782,10 @@ OpenMarkGui(promptText) {
     shotPath := TempShot
     StringReplace, shotPath, shotPath, \, /, All
     shotURL := "file:///" . shotPath . "?_=" . A_TickCount
-    ; Режим модалки: 'template' — обвод области, 'slots' — расстановка юнитов
-    ; (с попапом выбора номера), 'calib' — калибровка кнопок (просто клик-точка,
-    ; без номера юнита). Раньше calib шёл как 'slots', но с попапом номера это
-    ; сломало бы калибровку.
-    if (MarkMode = "template")
+    ; Режим модалки: 'template'/'maptitle' — обвод области, 'slots' —
+    ; расстановка юнитов (с попапом выбора номера), 'calib' — калибровка кнопок
+    ; (просто клик-точка, без номера юнита).
+    if (MarkMode = "template" || MarkMode = "maptitle")
         mode := "template"
     else if (InStr(MarkMode, "abs_"))
         mode := "calib"
@@ -1484,7 +1802,7 @@ OpenMarkGui(promptText) {
 ; ---- Отправка текущего списка слотов MarkList в HTML-модалку ----
 SendMarkSlotsToModal() {
     global MarkList, MarkMode
-    if (MarkMode = "template")
+    if (MarkMode = "template" || MarkMode = "maptitle")
         return  ; для шаблонов список слотов не нужен
     slotsStr := ""
     for i, s in MarkList {
@@ -1572,7 +1890,7 @@ return
 MarkCancel:
     MarkMode := ""
     TemplateName := ""
-    DragCleanup()
+    TitleCaptureMap := ""
     AddLog("Разметка/калибровка отменена пользователем")
     SetTimer, PollModalClose, Off
     Gui, Modal:Destroy
@@ -1682,6 +2000,7 @@ BtnPresetSave:
     IniWrite, %StartGameCenterY%,  %PresetsIni%, %PresetName%, StartGameCenterY
     IniWrite, %StartGameRadius%,   %PresetsIni%, %PresetName%, StartGameRadius
     ; ---- 5. Слоты всех карт (расположение юнитов) ----
+    IniWrite, %GameMode%, %PresetsIni%, %PresetName%, GameMode
     IniWrite, % MapList.Length(), %PresetsIni%, %PresetName%, MapCount
     for idx, mapName in MapList {
         nameKey := "Map_" idx "_Name"
@@ -1776,6 +2095,20 @@ BtnPresetLoad:
     ; ---- 5. Сохраняем загруженные значения в config.ini и settings.ini ----
     SaveConfig()
     SaveSettings()
+    ; ---- 5a. Режим из пресета (если указан) ----
+    IniRead, presetMode, %PresetsIni%, %PresetName%, GameMode, __NONE__
+    if (presetMode != "__NONE__" && presetMode != "ERROR" && presetMode != "" && IsValidGameMode(presetMode) && presetMode != GameMode) {
+        GameMode := presetMode
+        SelectedMapCtl := ""
+        MapCoords := {}
+        InvalidateTitleTemplates()
+        ReloadMapList()
+        LoadAllMapCoords()
+        RefreshMapDropdown()
+        WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
+        WBH_CallJS("ahkUpdateMap('')")
+        AddLog("Пресет переключил режим: " . GameModeLabel(GameMode))
+    }
     ; ---- 6. Слоты всех карт ----
     IniRead, mapCount, %PresetsIni%, %PresetName%, MapCount, 0
     Loop, %mapCount% {
@@ -1962,8 +2295,11 @@ BtnStartStop:
 FarmHotkeyAction:
     if (FarmMode != "autoplay") {
         if (SelectedMapCtl = "") {
-            AddLog("Сначала выбери карту", "warn")
-            WBH_CallJS("ahkUpdateStatus('Select a map', 'error')")
+            Gosub, MapDetectNow
+        }
+        if (SelectedMapCtl = "") {
+            AddLog("Карта не определена автоматически. Дождись экрана Travelling to... и попробуй снова", "warn")
+            WBH_CallJS("ahkUpdateStatus('Map not detected', 'error')")
             return
         }
         if (!MapCoords.HasKey(SelectedMapCtl)) {
@@ -2233,6 +2569,18 @@ BeginFarmRun() {
 }
 
 RunPlacementSequence:
+    ; Останавливаемся, если карта потеряла разметку (удалён *_slots.ini или
+    ; switched map): без этого slots.Length() падал бы на пустом значении.
+    if (!MapCoords.HasKey(SelectedMapCtl)) {
+        AddLog("Расстановка остановлена: карта """ SelectedMapCtl """ не размечена", "warn")
+        WBH_CallJS("ahkUpdateStatus('Map not marked', 'error')")
+        Running := false
+        SetTimer, WatchNextStage, Off
+        SetTimer, AutoPlayWatch, Off
+        WBH_CallJS("ahkUpdateFarm(false)")
+        WriteBotState()
+        return
+    }
     runHasStarted := false
     slots := MapCoords[SelectedMapCtl]
     AddLog("Слотов загружено: " slots.Length() " для """ SelectedMapCtl """")
@@ -2565,6 +2913,10 @@ return
 ; ---- Горячая клавиша — запись действий входа на выбранную карту ----
 ; Карта берётся из текущего выбора в сайдбаре. Эти действия выполняются
 ; после победы/поражения, когда карта была поставлена через Discord.
+MapDetectHotkeyAction:
+    GoSub, MapDetectNow
+return
+
 MapChangeRecordHotkeyAction:
 MapChangeF2:
     global BotMapRecordActive, RejoinRecordActive, SelectedMapCtl
@@ -3787,8 +4139,9 @@ BotWriteResponse(requestId, ok, message, path := "", region := "") {
 }
 
 WriteBotState() {
-    global BotStateFile, Running, SelectedMapCtl, FarmRunCount, PendingMapChange, MapList, BotRunning, BotMapRecordActive, BotMapRecordMap
+    global BotStateFile, Running, SelectedMapCtl, FarmRunCount, PendingMapChange, MapList, BotRunning, BotMapRecordActive, BotMapRecordMap, GameMode
     content := "running=" . (Running ? 1 : 0) . "`n"
+    content .= "game_mode=" . UriEncode(GameMode) . "`n"
     content .= "selected_map=" . UriEncode(SelectedMapCtl) . "`n"
     content .= "pending_map=" . UriEncode(PendingMapChange) . "`n"
     content .= "runs=" . FarmRunCount . "`n"
@@ -3804,8 +4157,8 @@ WriteBotState() {
 }
 
 BotStateText() {
-    global Running, SelectedMapCtl, PendingMapChange, FarmRunCount, BotMapRecordActive, BotMapRecordMap
-    return "Фарм: " (Running ? "запущен" : "остановлен") " | карта: " (SelectedMapCtl != "" ? SelectedMapCtl : "не выбрана") " | ранов: " FarmRunCount (PendingMapChange != "" ? " | ожидает: " PendingMapChange : "") (BotMapRecordActive ? " | запись: " BotMapRecordMap : "")
+    global Running, SelectedMapCtl, PendingMapChange, FarmRunCount, BotMapRecordActive, BotMapRecordMap, GameMode
+    return "Режим: " GameModeLabel(GameMode) " | Фарм: " (Running ? "запущен" : "остановлен") " | карта: " (SelectedMapCtl != "" ? SelectedMapCtl : "не выбрана") " | ранов: " FarmRunCount (PendingMapChange != "" ? " | ожидает: " PendingMapChange : "") (BotMapRecordActive ? " | запись: " BotMapRecordMap : "")
 }
 
 UriEncode(str) {
@@ -3828,7 +4181,11 @@ UriEncode(str) {
 
 BotMapActionsFile(mapName) {
     global BotActionsDir
-    return BotActionsDir . "\" . SafeMapName(mapName) . ".ini"
+    ; Действия входа хранятся по режиму: actions\<режим>\<карта>.ini.
+    dir := BotActionsDir . "\" . GameMode
+    if !InStr(FileExist(dir), "D")
+        FileCreateDir, %dir%
+    return dir . "\" . MapFileBase(mapName) . ".ini"
 }
 
 LoadBotMapActions(mapName) {
@@ -4042,7 +4399,7 @@ ProcessJSCmd(cmd) {
     ; Переменные ручного драга окна: без global они стали бы локальными в этой
     ; функции, и ManualDragLoop (метка, глобальная область) читал бы нули →
     ; сайдбар прыгал к курсору, а Roblox уезжал за левый край экрана.
-    global WinDragStartMX, WinDragStartMY, WinDragStartWX, WinDragStartWY, WinDragActive, MainGuiHwnd, GameHwnd, Embedded, GameAreaW
+    global WinDragStartMX, WinDragStartMY, WinDragStartWX, WinDragStartWY, WinDragLastMouseX, WinDragLastMouseY, WinDragLastTargetX, WinDragLastTargetY, WinDragMonitor, WinDragWorkLeft, WinDragWorkTop, WinDragWorkRight, WinDragWorkBottom, WinDragActive, MainGuiHwnd, GameHwnd, Embedded, GameAreaW, SidebarW
     
     ; Разбираем команду: "command" или "command/arg"
     slashPos := InStr(cmd, "/")
@@ -4087,11 +4444,33 @@ ProcessJSCmd(cmd) {
         return
     }
     if (action = "select-map") {
+        if (Running) {
+            ; Смена карты на ходу: расстановка продолжила бы работать со слотами
+            ; прежней карты, поэтому отказываем и возвращаем выбор в панели.
+            AddLog("Сначала останови фарм, чтобы сменить карту", "warn")
+            if (SelectedMapCtl != "")
+                WBH_CallJS("ahkUpdateMap('" . StrReplace(SelectedMapCtl, "'", "\\'") . "')")
+            else
+                WBH_CallJS("ahkUpdateMap('')")
+            return
+        }
         if (arg = "__none__")
             SelectedMapCtl := ""
         else
             SelectedMapCtl := arg
         Gosub, MapChanged
+        return
+    }
+    if (action = "select-mode") {
+        SelectGameMode(arg)
+        return
+    }
+    if (action = "detect-map") {
+        Gosub, MapDetectNow
+        return
+    }
+    if (action = "capture-title") {
+        Gosub, MapCaptureTitle
         return
     }
     if (action = "snapshot") {
@@ -4166,10 +4545,13 @@ ProcessJSCmd(cmd) {
     if (InStr(cmd, "drag-start-main/")) {
         params := SubStr(cmd, 17)
         slashPos := InStr(params, "/")
-        if (slashPos) {
+        if (slashPos && GetKeyState("LButton", "P")) {
             sx := SubStr(params, 1, slashPos - 1)
             sy := SubStr(params, slashPos + 1)
             WinDragStartMX := sx, WinDragStartMY := sy
+            WinDragLastMouseX := "", WinDragLastMouseY := ""
+            WinDragLastTargetX := "", WinDragLastTargetY := ""
+            WinDragMonitor := 0
             ; WinGetPos: OutX, OutY, OutWidth, OutHeight, WinTitle, ...
             ; Раньше здесь было «WinGetPos, X, Y, ahk_id %MainGuiHwnd%» — без
             ; пустых OutWidth/OutHeight заголовок окна попадал в поле ширины,
@@ -4178,16 +4560,13 @@ ProcessJSCmd(cmd) {
             WinGetPos, WinDragStartWX, WinDragStartWY, , , ahk_id %MainGuiHwnd%
             WinDragActive := true
             SetTimer, SyncDockPosition, Off
-            SetTimer, ManualDragLoop, 16
+            SetTimer, PollJSCmd, 5
+            SetTimer, ManualDragLoop, 10
         }
         return
     }
     if (InStr(cmd, "drag-end-main")) {
-        WinDragActive := false
-        SetTimer, ManualDragLoop, Off
-        ; При закреплении оба окна уже перемещены одним defer-пакетом в
-        ; ManualDragLoop, поэтому дополнительная синхронизация не нужна.
-        SetTimer, SyncDockPosition, Off
+        EndManualDrag(false)
         return
     }
     if (InStr(cmd, "drag-start-modal/")) {
@@ -4205,7 +4584,7 @@ ProcessJSCmd(cmd) {
 ; ---- Отправка начального состояния в HTML ----
 PushStateToHTML:
     global UpgradeX, UpgradeY, AutoX, AutoY, StartGameX, StartGameY, RepeatStageX, RepeatStageY
-    global Embedded, Running, FarmRunCount, AutoUpgradeEnabled, MapList, SelectedMapCtl, AppLanguage, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey
+    global Embedded, Running, FarmRunCount, AutoUpgradeEnabled, MapList, SelectedMapCtl, AppLanguage, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
     
     ; Сообщаем JS что мы в AHK-режиме (не standalone браузер)
     WBH_CallJS("ahkSetMode()")
@@ -4213,13 +4592,15 @@ PushStateToHTML:
     farmHotkeyJS := JsEscape(FarmHotkey)
     rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
     mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
-    WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "')")
+    mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+    WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
     WBH_CallJS("ahkUpdateVersion('" . CURRENT_VERSION . "', false)")
     WBH_CallJS("ahkUpdateEmbed(" . (Embedded ? "true" : "false") . ")")
     WBH_CallJS("ahkUpdateFarm(" . (Running ? "true" : "false") . ")")
     WBH_CallJS("ahkUpdateRunCount(" . FarmRunCount . ")")
     WBH_CallJS("ahkUpdateAutoUpgrade(" . (AutoUpgradeEnabled ? "true" : "false") . ")")
     WBH_CallJS("ahkSetFarmMode('" . JsEscape(FarmMode) . "')")
+    WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
     if (Running)
         WBH_CallJS("ahkUpdateStatus('Watching...', 'running')")
     else
@@ -4234,6 +4615,7 @@ PushStateToHTML:
     }
     else
         WBH_CallJS("ahkSetMapOptions("""")")
+    PushMapDetectResult(LastDetectedMap, LastDetectScore)
     
     ; Координаты
     upStr := "Up(" . UpgradeX . "," . UpgradeY . ")"
@@ -4350,10 +4732,10 @@ OpenModalWindow(name, title, w, h) {
 ; HTML-кнопка открывает настоящий AHK Hotkey-контрол. Он корректно
 ; распознаёт F-клавиши и комбинации даже во встроенном Shell.Explorer.
 ShowHotkeyCapture(target) {
-    global HotkeyCaptureTarget, HotkeyCaptureHwnd, HotkeyCaptureValue, HotkeyCaptureLastValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey
-    HotkeyCaptureTarget := (target = "rejoin") ? "rejoin" : ((target = "map-change") ? "map-change" : "farm")
+    global HotkeyCaptureTarget, HotkeyCaptureHwnd, HotkeyCaptureValue, HotkeyCaptureLastValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
+    HotkeyCaptureTarget := (target = "rejoin") ? "rejoin" : ((target = "map-change") ? "map-change" : ((target = "map-detect") ? "map-detect" : "farm"))
     DisableConfiguredHotkeys()
-    initial := (HotkeyCaptureTarget = "rejoin") ? RejoinRecordHotkey : ((HotkeyCaptureTarget = "map-change") ? MapChangeRecordHotkey : FarmHotkey)
+    initial := (HotkeyCaptureTarget = "rejoin") ? RejoinRecordHotkey : ((HotkeyCaptureTarget = "map-change") ? MapChangeRecordHotkey : ((HotkeyCaptureTarget = "map-detect") ? MapDetectHotkey : FarmHotkey))
     HotkeyCaptureLastValue := initial
 
     Gui, HotkeyCapture:Destroy
@@ -4649,12 +5031,22 @@ PollModalClose:
     else if (action = "upgrade-save") {
         GoSub, ModalSaveUpgrade
     }
+    ; ---- Распознавание карты: карточка «Map detection» в настройках ----
+    else if (action = "detect-map") {
+        GoSub, MapDetectNow
+    }
+    else if (action = "capture-title") {
+        SetTimer, PollModalClose, Off
+        Gui, Modal:Destroy
+        ModalHwnd := 0
+        GoSub, MapCaptureTitle
+    }
     ; ---- Команды mark-* (модалка разметки) ----
     else if (action = "mark-click") {
         GoSub, MarkClick
     }
     else if (action = "mark-region") {
-        ; arg = x1/y1/x2/y2 — обведённая область (для шаблонов Defeat/Victory/StartGame/AutoUpgrade)
+        ; arg = x1/y1/x2/y2 — обведённая область (шаблоны Defeat/Victory/StartGame/AutoUpgrade/заголовок карты)
         StringSplit, rp, arg, /
         SaveTemplateRegion(rp1, rp2, rp3, rp4)
         MarkMode := ""
@@ -4687,39 +5079,46 @@ PollModalClose:
 return
 
 HotkeyCaptureSave:
-    global HotkeyCaptureTarget, HotkeyCaptureValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey
+    global HotkeyCaptureTarget, HotkeyCaptureValue, FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey
     Gui, HotkeyCapture:Submit, NoHide
     captured := HotkeyCaptureValue
     if (captured = "") {
         AddLog("Горячая клавиша не выбрана", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "farm" && (captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey)) {
-        AddLog("Эта комбинация уже используется для записи Rejoin", "warn")
+    if (HotkeyCaptureTarget = "farm" && (captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey)) {
+        AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "rejoin" && (captured = FarmHotkey || captured = MapChangeRecordHotkey)) {
-        AddLog("Эта комбинация уже используется для запуска фарма", "warn")
+    if (HotkeyCaptureTarget = "rejoin" && (captured = FarmHotkey || captured = MapChangeRecordHotkey || captured = MapDetectHotkey)) {
+        AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
-    if (HotkeyCaptureTarget = "map-change" && (captured = FarmHotkey || captured = RejoinRecordHotkey)) {
-        AddLog("Эта комбинация уже используется другой настройкой", "warn")
+    if (HotkeyCaptureTarget = "map-change" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapDetectHotkey)) {
+        AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
+        return
+    }
+    if (HotkeyCaptureTarget = "map-detect" && (captured = FarmHotkey || captured = RejoinRecordHotkey || captured = MapChangeRecordHotkey)) {
+        AddLog("Эта комбинация уже используется другой горячей клавишей", "warn")
         return
     }
     SetTimer, PollHotkeyCapture, Off
     if (HotkeyCaptureTarget = "rejoin")
-        SetHotkeySettings(FarmHotkey, captured, MapChangeRecordHotkey)
+        SetHotkeySettings(FarmHotkey, captured, MapChangeRecordHotkey, MapDetectHotkey)
     else if (HotkeyCaptureTarget = "map-change")
-        SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, captured)
+        SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, captured, MapDetectHotkey)
+    else if (HotkeyCaptureTarget = "map-detect")
+        SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, captured)
     else
-        SetHotkeySettings(captured, RejoinRecordHotkey, MapChangeRecordHotkey)
+        SetHotkeySettings(captured, RejoinRecordHotkey, MapChangeRecordHotkey, MapDetectHotkey)
     ApplyConfiguredHotkeys()
     SaveSettings()
     farmHotkeyJS := JsEscape(FarmHotkey)
     rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
     mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
-    WBH_CallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "')")
-    ModalCallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "')")
+    mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+    WBH_CallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+    ModalCallJS("ahkHotkeyCaptureFinished('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
     Gui, HotkeyCapture:Destroy
 return
 
@@ -4773,6 +5172,7 @@ PushModalData(name) {
         farmHotkeyJS := JsEscape(FarmHotkey)
         rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
         mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
+        mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
         botTokenJS := JsEscape(BotToken)
         botGuildJS := JsEscape(BotGuildId)
         botAllowedJS := JsEscape(BotAllowedUserIds)
@@ -4785,7 +5185,7 @@ PushModalData(name) {
             . (RejoinEnabled ? 1 : 0) . ",'" . rjLink . "',"
             . RejoinMaxAttempts . "," . RejoinWaitTimeout . "," . RejoinPostJoinDelay . ","
             . RejoinPostActionsDelay . "," . (MouseSpeedEnabled ? 1 : 0) . "," . ZoomScrolls . "," . (ZoomEnabled ? 1 : 0) . "," . (TopCameraEnabled ? 1 : 0) . ",'" . AppLanguage . "','" . farmHotkeyJS . "','" . rejoinHotkeyJS . "',"
-            . (BotEnabled ? 1 : 0) . "," . (BotAutoStart ? 1 : 0) . ",'" . botTokenJS . "','" . botGuildJS . "','" . botAllowedJS . "','" . mapChangeHotkeyJS . "'," . BotMapPostActionsDelay . ")")
+            . (BotEnabled ? 1 : 0) . "," . (BotAutoStart ? 1 : 0) . ",'" . botTokenJS . "','" . botGuildJS . "','" . botAllowedJS . "','" . mapChangeHotkeyJS . "'," . BotMapPostActionsDelay . ",'" . JsEscape(FarmMode) . "','" . mapDetectHotkeyJS . "')")
         ModalCallJS("ahkSetFarmMode('" . JsEscape(FarmMode) . "')")
         AddLog("Settings пушнуты в модалку (Rejoin: " (RejoinEnabled ? "on" : "off") ", link len=" StrLen(RejoinShareLink) ")")
         ; Также пушим количество записанных Post-Rejoin действий
@@ -4794,6 +5194,9 @@ PushModalData(name) {
         ModalCallJS("ahkRejoinRecordState(" (RejoinRecordActive ? "true" : "false") ")")
         PushBotMapRecordState()
         ModalCallJS("ahkUpdateBotStatus('" . (BotRunning ? "Running" : "Stopped") . "','" . (BotRunning ? "running" : "") . "')")
+        ; Карточка «Распознавание карты»: активный режим и последний результат
+        ModalCallJS("ahkSetGameMode('" . GameMode . "')")
+        ModalCallJS("ahkMapDetectResult('" . JsEscape(LastDetectedMap) . "'," . LastDetectScore . ")")
     }
     else if (name = "presets") {
         ; Собираем список пресетов из presets.ini
@@ -4895,13 +5298,25 @@ ModalSaveSettings:
         WBH_CallJS("ahkSetLanguage('" . AppLanguage . "')")
     }
     if (vals0 >= 28) {
-        SetHotkeySettings(vals26, vals27, vals28)
+        SetHotkeySettings(vals26, vals27, vals28, MapDetectHotkey)
         ApplyConfiguredHotkeys()
         farmHotkeyJS := JsEscape(FarmHotkey)
         rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
         mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
-        WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "')")
-        ModalCallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "')")
+        mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+        WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+        ModalCallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+    }
+    if (vals0 >= 36) {
+        SetHotkeySettings(FarmHotkey, RejoinRecordHotkey, MapChangeRecordHotkey, vals36)
+        ApplyConfiguredHotkeys()
+        SaveHotkeySettings()
+        farmHotkeyJS := JsEscape(FarmHotkey)
+        rejoinHotkeyJS := JsEscape(RejoinRecordHotkey)
+        mapChangeHotkeyJS := JsEscape(MapChangeRecordHotkey)
+        mapDetectHotkeyJS := JsEscape(MapDetectHotkey)
+        WBH_CallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
+        ModalCallJS("ahkSetHotkeys('" . farmHotkeyJS . "','" . rejoinHotkeyJS . "','" . mapChangeHotkeyJS . "','" . mapDetectHotkeyJS . "')")
     }
     if (vals0 >= 33) {
         BotEnabled := (vals29 = "1" || vals29 = "true") ? true : false
@@ -4949,6 +5364,21 @@ ModalSaveUpgrade:
     AddLog("Auto Upgrade settings saved from modal")
 return
 
+EndManualDrag(notifyUI := false) {
+    global WinDragActive, WinDragLastMouseX, WinDragLastMouseY, WinDragLastTargetX, WinDragLastTargetY, WinDragMonitor, WB
+    wasActive := WinDragActive
+    WinDragActive := false
+    WinDragLastMouseX := "", WinDragLastMouseY := ""
+    WinDragLastTargetX := "", WinDragLastTargetY := ""
+    WinDragMonitor := 0
+    SetTimer, ManualDragLoop, Off
+    SetTimer, SyncDockPosition, Off
+    SetTimer, PollJSCmd, 20
+    if (notifyUI && wasActive && WB && WB.ReadyState = 4) {
+        try WB.Document.parentWindow.ahkEndMainDrag()
+    }
+}
+
 ; ---- Нативный драг главного окна: ручной перенос через таймер ----
 ; SendMessage WM_NCLBUTTONDOWN/HTCAPTION не работает при -Caption.
 ; Вместо этого AHK сам двигает окно(а) по смещению мыши через таймер.
@@ -4963,11 +5393,53 @@ return
 ; рабочего стола: это заставляет фон соседнего приложения проступать между
 ; двумя окнами и создаёт белые полосы.
 ManualDragLoop:
+    ; ActiveX may lose mouseup when the cursor leaves the panel. Check the
+    ; physical button before moving so the last timer tick cannot jump the window.
+    if (!WinDragActive)
+        return
+    if (!GetKeyState("LButton", "P")) {
+        EndManualDrag(true)
+        return
+    }
     CoordMode, Mouse, Screen
     MouseGetPos, mx, my
+    if (mx = WinDragLastMouseX && my = WinDragLastMouseY)
+        return
     ; Вычисляем новую позицию сайдбара относительно стартовой точки зажатия
     newX := WinDragStartWX + mx - WinDragStartMX
     newY := WinDragStartWY + my - WinDragStartMY
+    ; Keep the panel reachable. In dock mode, clamp the Roblox/panel pair as a
+    ; unit; otherwise keep at least the title strip inside the work area.
+    if (Embedded && GameHwnd && DllCall("IsWindow", "ptr", GameHwnd)) {
+        if (!GetWorkAreaAtPoint(mx, my, WinDragMonitor, WinDragWorkLeft, WinDragWorkTop, WinDragWorkRight, WinDragWorkBottom)) {
+            SysGet, WinDragWork, MonitorWorkArea
+        }
+        minX := WinDragWorkLeft + GameAreaW
+        maxX := WinDragWorkRight - SidebarW
+        if (newX < minX)
+            newX := minX
+        if (newX > maxX)
+            newX := maxX
+        if (newY < WinDragWorkTop)
+            newY := WinDragWorkTop
+        if (newY + GameAreaH > WinDragWorkBottom)
+            newY := WinDragWorkBottom - GameAreaH
+    } else {
+        if (!GetWorkAreaAtPoint(mx, my, WinDragMonitor, WinDragWorkLeft, WinDragWorkTop, WinDragWorkRight, WinDragWorkBottom))
+            SysGet, WinDragWork, MonitorWorkArea
+        if (newX + 48 < WinDragWorkLeft)
+            newX := WinDragWorkLeft - SidebarW + 48
+        if (newX + SidebarW - 48 > WinDragWorkRight)
+            newX := WinDragWorkRight - 48
+        if (newY < WinDragWorkTop)
+            newY := WinDragWorkTop
+        if (newY > WinDragWorkBottom - 32)
+            newY := WinDragWorkBottom - 32
+    }
+    WinDragLastMouseX := mx, WinDragLastMouseY := my
+    if (newX = WinDragLastTargetX && newY = WinDragLastTargetY)
+        return
+    WinDragLastTargetX := newX, WinDragLastTargetY := newY
     ; Только перемещение: без resize / z-order / activate
     moveFlags := 0x0015  ; SWP_NOSIZE(0x1) | SWP_NOZORDER(0x4) | SWP_NOACTIVATE(0x10)
     if (Embedded && GameHwnd && DllCall("IsWindow", "ptr", GameHwnd)) {
@@ -5306,6 +5778,7 @@ RunUpdateScript_Inner(zipURL) {
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\ahk\\settings.ini')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\ahk\\presets.ini')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\ahk\\token.ini')),`r`n"
+    script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'macro\\ahk\\secrets.ini')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'bot\\actions')),`r`n"
     script .= "        [System.IO.Path]::GetFullPath((Join-Path $srcDir 'bot\\runtime'))`r`n"
     script .= "    )`r`n"

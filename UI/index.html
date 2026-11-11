@@ -51,6 +51,8 @@ html, body {
    содержит ТОЛЬКО сайдбар. */
 
 /* ---- Sidebar fills the whole AHK window ---- */
+/* Панель — жёсткий столбец: шапка и лог всегда на месте, прокрутки нет.
+   Если окно слишком низкое, прокручивается только средний блок с настройками. */
 .sidebar {
     -ms-flex: 1;
     flex: 1;
@@ -60,24 +62,38 @@ html, body {
     display: flex;
     -ms-flex-direction: column;
     flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -ms-overflow-style: scrollbar; /* тонкий скроллбар (цвета — в блоке Scrollbar) */
-    padding: 16px 14px 10px;
+    overflow: hidden;
+    padding: 10px 10px 6px;
     height: 100%;
+}
+.sidebar-body {
+    -ms-flex: 0 1 auto; flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto; overflow-x: hidden;
+    -ms-overflow-style: scrollbar;
+    display: -ms-flexbox; display: flex;
+    -ms-flex-direction: column; flex-direction: column;
+}
+.log-status {
+    display: -ms-flexbox; display: flex;
+    -ms-flex-align: center; align-items: center;
+    font-size: 11px; color: #999;
+    min-width: 0; overflow: hidden; white-space: nowrap;
 }
 
 .ctrl { -ms-flex-negative: 0; flex-shrink: 0; }
-.ctrl > * + * { margin-top: 6px; }
+.ctrl > * + * { margin-top: 5px; }
 
 .sidebar-header {
     display: -ms-flexbox; display: flex;
     -ms-flex-align: center; align-items: center;
     -ms-flex-pack: justify; justify-content: space-between;
     -ms-flex-negative: 0; flex-shrink: 0;
-    cursor: default;
+    cursor: move;
+    -ms-touch-action: none; touch-action: none;
     -webkit-user-select: none; -ms-user-select: none; user-select: none;
 }
+.sidebar-header.is-dragging { cursor: move; }
 .logo { display: -ms-flexbox; display: flex; -ms-flex-align: center; align-items: center; }
 .logo-mark {
     width: 28px; height: 28px; border-radius: 6px;
@@ -126,7 +142,7 @@ html, body {
 
 .sep {
     border: none; height: 1px; background: #252525;
-    margin: 10px 0; -ms-flex-negative: 0; flex-shrink: 0;
+    margin: 4px 0; -ms-flex-negative: 0; flex-shrink: 0;
 }
 
 /* Labels & Badges */
@@ -161,6 +177,8 @@ html, body {
 .btn-start:hover  { filter: brightness(1.1); }
 .btn-start.running { background: #ef4444; color: #fff; }
 .btn-ghost        { background: transparent; color: #666; padding: 6px 10px; }
+.btn-secondary    { background: #1e1e1e; color: #e4e4e4; border: 1px solid #333; }
+.btn-secondary:hover { background: #262626; border-color: #3d3d3d; }
 .btn-ghost:hover  { background: #1a1a1a; color: #e4e4e4; }
 .btn-danger:hover { background: rgba(239,68,68,0.12); color: #ef4444; }
 .btn-sm { padding: 5px 8px; font-size: 11px; }
@@ -225,11 +243,11 @@ html, body {
 /* ---- Coord Grid ---- */
 .coord-grid { display: -ms-flexbox; display: flex; -ms-flex-wrap: wrap; flex-wrap: wrap; }
 .coord-item {
-    background: #1a1a1a; border-radius: 6px; padding: 5px 8px;
+    background: #1a1a1a; border-radius: 6px; padding: 3px 7px;
     display: -ms-flexbox; display: flex;
     -ms-flex-pack: justify; justify-content: space-between;
     -ms-flex-align: center; align-items: center;
-    width: 49%; margin-right: 2%; margin-bottom: 4px;
+    width: 49%; margin-right: 2%; margin-bottom: 3px;
 }
 .coord-item:nth-child(even) { margin-right: 0; }
 .coord-key   { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -275,20 +293,44 @@ html, body {
 
 /* ---- Log ---- */
 .log-section {
-    -ms-flex: 1; flex: 1;
+    /* Базис 0 и здесь: высота лога зависит только от свободного места,
+       а не от количества строк в нём. */
+    -ms-flex: 1 1 0%; flex: 1 1 0%;
+    min-height: 104px;
     display: -ms-flexbox; display: flex;
     -ms-flex-direction: column; flex-direction: column;
-    min-height: 0; overflow: hidden;
+    overflow: hidden;
+    margin-top: 6px;
 }
 .log-header { -ms-flex-negative: 0; flex-shrink: 0; margin-bottom: 4px; }
+.log-actions { -ms-flex-negative: 0; flex-shrink: 0; display: -ms-flexbox; display: flex; -ms-flex-align: center; align-items: center; }
+.log-actions > * + * { margin-left: 4px; }
+/* Row of the two map-detection buttons: IE11 ignores `gap`, so space them by hand. */
+.map-detect-actions button { -ms-flex: 1; flex: 1; }
+.map-detect-actions button + button { margin-left: 8px; }
 .log-box {
-    -ms-flex: 1; flex: 1;
+    /* Базис 0: лог не раздувается под содержимое, а занимает ровно свободное
+       место в панели и прокручивается внутри себя. */
+    -ms-flex: 1 1 0%; flex: 1 1 0%;
+    min-height: 0; max-height: 100%;
     background: #0f0f0f; border: 1px solid #252525;
     border-radius: 6px; padding: 6px 8px;
     overflow-y: auto; overflow-x: hidden;
     -ms-overflow-style: scrollbar; /* тонкий скроллбар (цвета — в блоке Scrollbar) */
     font-family: 'Consolas', monospace; font-size: 11px;
-    line-height: 1.7; color: #666; word-wrap: break-word;
+    line-height: 1.7; color: #b4b4b4; word-wrap: break-word;
+}
+/* Развёрнутый лог: панель лога занимает всё окно, чтобы читать историю. */
+.log-section.log-expanded {
+    position: fixed; left: 0; top: 0; right: 0; bottom: 0;
+    z-index: 60; margin: 0; padding: 10px 12px 12px;
+    background: #121212; border-top: 2px solid #2a2a2a;
+}
+.log-section.log-expanded .log-header { margin-bottom: 8px; }
+.log-section.log-expanded .log-box {
+    -ms-flex: 1; flex: 1;
+    height: auto; min-height: 0; max-height: none;
+    font-size: 12px;
 }
 .log-entry { display: -ms-flexbox; display: flex; }
 .log-time  { color: #2e2e2e; -ms-flex-negative: 0; flex-shrink: 0; margin-right: 8px; }
@@ -912,6 +954,8 @@ body.modal-only .modal-foot {
                 </div>
             </header>
 
+            <div class="sidebar-body">
+
             <hr class="sep">
 
             <section class="ctrl">
@@ -929,19 +973,33 @@ body.modal-only .modal-foot {
 
             <section class="ctrl">
                 <div class="row between">
-                    <span class="label" data-i18n="map">Map</span>
-                    <span class="badge" id="mapBadge" data-i18n="none">None</span>
+                    <span class="label" data-i18n="gameMode">Mode</span>
+                    <span class="badge active" id="modeBadge">Infinite</span>
                 </div>
-                <div class="select-wrap custom-select" id="mapCustomSelect">
-                    <button type="button" class="select custom-select-btn" id="mapSelectBtn">
-                        <span id="mapSelectLabel" data-i18n="selectMap">-- Select Map --</span>
+                <div class="select-wrap custom-select" id="modeCustomSelect">
+                    <button type="button" class="select custom-select-btn" id="modeSelectBtn">
+                        <span id="modeSelectLabel">Infinite</span>
                     </button>
                     <svg class="select-chevron" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
-                    <div class="custom-select-list" id="mapSelectList"></div>
+                    <div class="custom-select-list" id="modeSelectList"></div>
                 </div>
-                <select id="mapSelect" class="select" style="display:none">
+                <select id="modeSelect" class="select" style="display:none">
+                    <option value="infinite" data-i18n="modeInfinite">Infinite</option>
+                    <option value="raid" data-i18n="modeRaid">Raid</option>
+                    <option value="summer" data-i18n="modeSummer">Summer Event</option>
+                </select>
+            </section>
+
+            <hr class="sep">
+
+            <section class="ctrl">
+                <div class="row between">
+                    <span class="label" data-i18n="map">Map</span>
+                    <span class="badge" id="mapBadge" data-i18n="none">None</span>
+                <select id="mapSelect" class="select" style="display:none" aria-hidden="true" tabindex="-1">
                     <option value="">-- Select Map --</option>
                 </select>
+                </div>
                 <div class="btn-row">
                     <button class="btn btn-ghost btn-sm" id="btnSnapshot">
                         <svg viewBox="0 0 16 16" fill="none"><rect x="1.5" y="4.5" width="13" height="10" rx="2" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="9.5" r="2.5" stroke="currentColor" stroke-width="1.2"/><circle cx="12.5" cy="7.5" r="0.8" fill="currentColor"/><path d="M5 4.5 6.2 2.8a.5.5 0 0 1 .4-.3h2.8a.5.5 0 0 1 .4.3L11 4.5" stroke="currentColor" stroke-width="1.2"/></svg>
@@ -1009,19 +1067,24 @@ body.modal-only .modal-foot {
 
             <hr class="sep">
 
-            <div class="status-bar">
-                <div class="status-dot" id="statusDot"></div>
-                <span id="statusText" data-i18n="idle">Idle</span>
-                <span id="runCount" class="run-count" data-i18n="runs">Runs: 0</span>
-            </div>
+            </div><!-- /sidebar-body -->
 
             <section class="log-section">
                 <div class="row between log-header">
-                    <span class="label" data-i18n="log">Log</span>
-                    <button class="btn btn-ghost btn-xs" id="btnClearLog" data-i18n="clear">Clear</button>
+                    <span class="log-status">
+                        <span class="status-dot" id="statusDot"></span>
+                        <span id="statusText" data-i18n="idle">Idle</span>
+                    </span>
+                    <span class="log-actions">
+                        <span id="runCount" class="run-count" data-i18n="runs">Runs: 0</span>
+                        <button class="btn btn-ghost btn-xs" id="btnExpandLog" data-tip="Expand log" data-i18n-tip="logExpand">
+                            <svg viewBox="0 0 16 16" fill="none" width="11" height="11"><path d="M6 2H2v4M10 14h4v-4M2 2l5 5M14 14l-5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                        </button>
+                        <button class="btn btn-ghost btn-xs" id="btnClearLog" data-i18n="clear">Clear</button>
+                    </span>
                 </div>
                 <div class="log-box" id="logBox">
-                    <div class="log-entry"><span class="log-time">--:--:--</span> <span data-i18n="loading">Loading...</span></div>
+                    <div class="log-entry log-placeholder"><span class="log-time">--:--:--</span> <span data-i18n="loading">Loading...</span></div>
                 </div>
             </section>
 
@@ -1096,11 +1159,22 @@ body.modal-only .modal-foot {
                     <div class="field-hint">AutoPlay mode ignores map slots and keeps checking the AutoPlay button after each restart.</div>
                 </fieldset>
                 <fieldset class="fieldset">
+                    <legend class="fieldset-legend" data-i18n="mapDetection">Map detection</legend>
+                    <div class="field-hint" data-i18n="mapDetectionHint">The macro reads the map title on the "Travelling to..." screen and matches it with a title template from the maps folder.</div>
+                    <div class="row map-detect-actions" style="margin-top:10px;">
+                        <button class="btn btn-primary btn-sm" id="btnDetectMap" data-i18n="detectMap">Detect map</button>
+                        <button class="btn btn-secondary btn-sm" id="btnCaptureMapTitle" data-i18n="captureMapTitle">Capture title</button>
+                    </div>
+                    <div class="field-hint" id="mapDetectResult" style="margin-top:8px; color:#888;">&mdash;</div>
+                    <div class="field-hint" data-i18n="mapTitleHint">To add a map: take a snapshot, then press Capture title and drag a box around the map name on the "Travelling to..." screen.</div>
+                </fieldset>
+                <fieldset class="fieldset">
                     <legend class="fieldset-legend" data-i18n="hotkeys">Hotkeys</legend>
                     <div class="form-grid">
                         <div class="field"><label class="field-label" data-i18n="farmHotkey">Start / Stop Farm</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setFarmHotkey" value="F9" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureFarmHotkey" data-i18n="recordKey">Record</button></div></div>
                         <div class="field"><label class="field-label" data-i18n="rejoinHotkey">Rejoin Record</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setRejoinHotkey" value="F1" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureRejoinHotkey" data-i18n="recordKey">Record</button></div></div>
                         <div class="field"><label class="field-label" data-i18n="mapChangeHotkey">Map Entry Record</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setMapChangeHotkey" value="F2" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureMapChangeHotkey" data-i18n="recordKey">Record</button></div></div>
+                        <div class="field"><label class="field-label" data-i18n="mapDetectHotkey">Check map</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setMapDetectHotkey" value="F3" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureMapDetectHotkey" data-i18n="recordKey">Record</button></div></div>
                     </div>
                     <div class="field-hint" data-i18n="hotkeyHint">Click Record, then press a key or combination, for example Ctrl+F8.</div>
                     <div class="rejoin-actions-row" style="margin-top:8px;">
@@ -1531,14 +1605,47 @@ body.modal-only .modal-foot {
 
     /* ---- Log ---- */
     var logBox = $('#logBox');
+    var LOG_MAX_ENTRIES = 300;
     function log(text, cls) {
         if (!logBox) return;
+        var placeholder = logBox.querySelector('.log-placeholder');
+        if (placeholder) logBox.removeChild(placeholder);
         var entry = document.createElement('div');
         entry.className = 'log-entry' + (cls ? ' ' + cls : '');
         entry.innerHTML = '<span class="log-time">' + now() + '</span> ' + esc(text);
         logBox.appendChild(entry);
+        // Панель живёт часами: старые строки удаляем, чтобы DOM не разрастался.
+        while (logBox.childNodes.length > LOG_MAX_ENTRIES)
+            logBox.removeChild(logBox.firstChild);
         logBox.scrollTop = logBox.scrollHeight;
     }
+
+    /* ---- Разворот лога на всё окно панели ---- */
+    var logSection = document.querySelector('.log-section');
+    var btnExpandLog = $('#btnExpandLog');
+    var LOG_EXPAND_ICON = '<svg viewBox="0 0 16 16" fill="none" width="11" height="11"><path d="M6 2H2v4M10 14h4v-4M2 2l5 5M14 14l-5-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    var LOG_COLLAPSE_ICON = '<svg viewBox="0 0 16 16" fill="none" width="11" height="11"><path d="M9 2v5h5M7 14v-5H2M9 7l5-5M7 9l-5 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+    function isLogExpanded() {
+        return !!logSection && (' ' + logSection.className + ' ').indexOf(' log-expanded ') !== -1;
+    }
+    function setLogExpanded(expanded) {
+        if (!logSection) return;
+        logSection.className = 'log-section' + (expanded ? ' log-expanded' : '');
+        if (btnExpandLog) {
+            btnExpandLog.innerHTML = expanded ? LOG_COLLAPSE_ICON : LOG_EXPAND_ICON;
+            btnExpandLog.setAttribute('data-tip', uiText(expanded ? 'logCollapse' : 'logExpand'));
+        }
+        if (expanded && logBox) logBox.scrollTop = logBox.scrollHeight;
+    }
+    if (btnExpandLog) on(btnExpandLog, 'click', function (e) {
+        e = e || window.event;
+        if (e.stopPropagation) e.stopPropagation();
+        setLogExpanded(!isLogExpanded());
+    });
+    on(document, 'keydown', function (e) {
+        e = e || window.event;
+        if (e && e.keyCode === 27 && isLogExpanded()) setLogExpanded(false);
+    });
 
     /* ---- Modal System ---- */
     var overlay = $('#overlay');
@@ -1580,11 +1687,8 @@ body.modal-only .modal-foot {
     });
 
     // Map
-    var mapSelect = $('#mapSelect');      // скрытый нативный select — источник данных
+    var mapSelect = $('#mapSelect');
     var mapBadge  = $('#mapBadge');
-    var mapBtn    = $('#mapSelectBtn');
-    var mapLabel  = $('#mapSelectLabel');
-    var mapList   = $('#mapSelectList');
 
     function fireChange(el) {
         if (document.createEvent) {
@@ -1595,57 +1699,91 @@ body.modal-only .modal-foot {
             el.fireEvent('onchange');
         }
     }
-    function closeMapList() { mapList.className = 'custom-select-list'; }
-    function toggleMapList() {
-        mapList.className = 'custom-select-list' + (mapList.className.indexOf('open') === -1 ? ' open' : '');
+    function syncMapStatus() {
+        var val = mapSelect.value || currentMapName;
+        state.map = val || null;
+        mapBadge.textContent = val ? val : uiText('none');
+        mapBadge.className = val ? 'badge active' : 'badge';
     }
-    function syncMapCustomUI() {
-        mapList.innerHTML = '';
-        var opts = mapSelect.options;
+    on(mapSelect, 'change', syncMapStatus);
+
+    /* ---- Game mode: Infinite / Raid / Summer Event ---- */
+    var modeSelect = $('#modeSelect');
+    var modeBtn = $('#modeSelectBtn');
+    var modeLabel = $('#modeSelectLabel');
+    var modeList = $('#modeSelectList');
+    var modeBadge = $('#modeBadge');
+    function closeModeList() { if (modeList) modeList.className = 'custom-select-list'; }
+    function modeText(value) {
+        if (!modeSelect) return value;
+        var opts = modeSelect.options;
+        for (var i = 0; i < opts.length; i++) if (opts[i].value === value) return opts[i].text;
+        return value;
+    }
+    function syncModeCustomUI() {
+        if (!modeSelect || !modeList) return;
+        modeList.innerHTML = '';
+        var opts = modeSelect.options;
         for (var i = 0; i < opts.length; i++) {
-            if (!opts[i].value) continue; // плейсхолдер не дублируем в списке
             (function (opt) {
                 var div = document.createElement('div');
-                div.className = 'custom-select-item' + (opt.value === mapSelect.value ? ' active' : '');
+                div.className = 'custom-select-item' + (opt.value === modeSelect.value ? ' active' : '');
                 div.textContent = opt.text;
                 on(div, 'click', function () {
-                    mapSelect.value = opt.value;
-                    fireChange(mapSelect);
-                    closeMapList();
+                    modeSelect.value = opt.value;
+                    fireChange(modeSelect);
+                    closeModeList();
                 });
-                mapList.appendChild(div);
+                modeList.appendChild(div);
             })(opts[i]);
         }
-        mapLabel.textContent = mapSelect.value ? mapSelect.options[mapSelect.selectedIndex].text : uiText('selectMap');
+        if (modeLabel) modeLabel.textContent = modeText(modeSelect.value);
+        if (modeBadge) {
+            modeBadge.textContent = modeText(modeSelect.value);
+            modeBadge.className = 'badge active';
+        }
     }
-    on(mapBtn, 'click', function (e) {
+    if (modeSelect) on(modeSelect, 'change', function () {
+        syncModeCustomUI();
+        sendCmd('select-mode/' + modeSelect.value);
+    });
+    if (modeBtn) on(modeBtn, 'click', function (e) {
         e = e || window.event;
         if (e.stopPropagation) e.stopPropagation();
-        toggleMapList();
+        if (modeList) modeList.className = 'custom-select-list' + (modeList.className.indexOf('open') === -1 ? ' open' : '');
     });
     on(document, 'click', function (e) {
         var tgt = (e || window.event).target || (e || window.event).srcElement;
-        if (tgt !== mapBtn && !mapBtn.contains(tgt) && tgt !== mapList && !mapList.contains(tgt)) closeMapList();
+        if (modeBtn && modeList && tgt !== modeBtn && !modeBtn.contains(tgt) && tgt !== modeList && !modeList.contains(tgt)) closeModeList();
     });
-    on(mapSelect, 'change', function () {
-        var val = mapSelect.value;
-        state.map = val || null;
-        mapBadge.textContent = val ? mapSelect.options[mapSelect.selectedIndex].text : 'None';
-        mapBadge.className = val ? 'badge active' : 'badge';
-        syncMapCustomUI();
-        sendCmd('select-map/' + (val || '__none__'));
-    });
+    window.ahkSetGameMode = function (value) {
+        if (!modeSelect) return;
+        modeSelect.value = value || 'infinite';
+        syncModeCustomUI();
+    };
+    window.ahkMapDetectResult = function (name, score, otherMap, otherMode) {
+        var el = document.getElementById('mapDetectResult');
+        if (!el) return;
+        score = parseInt(score, 10) || 0;
+        if (otherMap && otherMode) {
+            el.textContent = uiText('mapOtherMode') + ': ' + otherMap + ' (' + modeText(otherMode) + ')';
+            el.style.color = '#f59e0b';
+        } else if (name) {
+            el.textContent = uiText('mapDetected') + ': ' + name + ' (' + score + '%)';
+            el.style.color = '#22c55e';
+        } else {
+            el.textContent = score > 0 ? uiText('mapNotDetected') + ' (' + score + '%)' : uiText('mapNotDetected');
+            el.style.color = '#ef4444';
+        }
+    };
+    syncModeCustomUI();
     on($('#btnSnapshot'), 'click', function () {
         sendCmd('snapshot');
     });
     on($('#btnMark'), 'click', function () {
-        if (!state.map) return log('Select a map first!', 'warn');
         sendCmd('mark-slots');
     });
     on($('#btnClear'), 'click', function () {
-        mapSelect.value = ''; state.map = null;
-        mapBadge.textContent = uiText('none'); mapBadge.className = 'badge';
-        syncMapCustomUI();
         sendCmd('clear-map');
     });
     var farmModeSelect = $('#farmModeSelect');
@@ -1872,7 +2010,7 @@ body.modal-only .modal-foot {
             mapBadge.textContent = uiText('none');
             mapBadge.className = 'badge';
         }
-        syncMapCustomUI();
+        syncMapStatus();
     };
 
     window.ahkSetMapOptions = function (optStr) {
@@ -1885,7 +2023,7 @@ body.modal-only .modal-foot {
             opt.textContent = names[i];
             mapSelect.appendChild(opt);
         }
-        syncMapCustomUI();
+        syncMapStatus();
     };
 
     window.ahkClearLog = function () { if (logBox) logBox.innerHTML = ''; };
@@ -2013,7 +2151,7 @@ body.modal-only .modal-foot {
             slots: 'Slots', undo: 'Undo', doneSave: 'Done / Save', snapshotPreview: 'Snapshot Preview',
             mapName: 'Map name', confirm: 'Confirm',
             languageHint: 'The language is saved for the next launch.', hotkeys: 'Hotkeys',
-            farmHotkey: 'Start / Stop Farm', rejoinHotkey: 'Rejoin Record', recordKey: 'Record', pressKey: 'Press key...',
+            farmHotkey: 'Start / Stop Farm', rejoinHotkey: 'Rejoin Record', mapDetectHotkey: 'Check map', recordKey: 'Record', pressKey: 'Press key...',
             hotkeyCaptureTitle: 'Assign hotkey', hotkeyCapturePrompt: 'Press the key or combination:', hotkeyCaptureHint: 'For example: Ctrl+F8 or F9',
             hotkeyHint: 'Click Record, then press a key or combination, for example Ctrl+F8.', delays: 'Delays (ms)',
             placeUnit: 'Place Unit', betweenUnits: 'Between Units', upgradeClick: 'Upgrade Click',
@@ -2033,7 +2171,12 @@ body.modal-only .modal-foot {
             vipGuide2: '<b>2.</b> Click <b>Regenerate</b> to create a new link (or use existing one)',
             vipGuide3: '<b>3.</b> Copy the full link — it looks like:<br><code>https://www.roblox.com/share?code=abc123...&amp;type=Server</code>',
             vipGuide4: '<b>4.</b> Paste it into the <b>VIP Share Link</b> field above',
-            vipGuide5: '<b>5.</b> Check <b>Enabled</b> and click <b>Save</b>', cancel: 'Cancel', save: 'Save'
+            vipGuide5: '<b>5.</b> Check <b>Enabled</b> and click <b>Save</b>', cancel: 'Cancel', save: 'Save',
+            gameMode: 'Mode', modeInfinite: 'Infinite', modeRaid: 'Raid', modeSummer: 'Summer Event',
+            mapDetection: 'Map detection', mapDetectionHint: 'Windows OCR reads the title and checks it against map catalogs. The capture area includes long map names.',
+            detectMap: 'Detect map', captureMapTitle: 'Capture title', mapTitleHint: 'If the title belongs to another mode, the macro will tell you which mode to select. OCR does not require separate title templates.',
+            mapDetected: 'Detected', mapNotDetected: 'Not detected', mapOtherMode: 'Found in another mode', mapNoTitles: 'No title templates in this mode yet',
+            logExpand: 'Expand log', logCollapse: 'Collapse log'
         },
         ru: {
             settingsTitle: 'Настройки', minimize: 'Свернуть', close: 'Закрыть', language: 'Язык',
@@ -2069,7 +2212,7 @@ body.modal-only .modal-foot {
             slots: 'Слоты', undo: 'Отменить', doneSave: 'Готово / Сохранить', snapshotPreview: 'Предпросмотр снимка',
             mapName: 'Название карты', confirm: 'Подтвердить',
             languageHint: 'Язык сохранится для следующего запуска.', hotkeys: 'Горячие клавиши',
-            farmHotkey: 'Запуск / остановка фарма', rejoinHotkey: 'Запись переподключения', recordKey: 'Записать', pressKey: 'Нажми клавишу...',
+            farmHotkey: 'Запуск / остановка фарма', rejoinHotkey: 'Запись переподключения', mapDetectHotkey: 'Проверка карты', recordKey: 'Записать', pressKey: 'Нажми клавишу...',
             hotkeyCaptureTitle: 'Назначение горячей клавиши', hotkeyCapturePrompt: 'Нажмите клавишу или сочетание:', hotkeyCaptureHint: 'Например: Ctrl+F8 или F9',
             hotkeyHint: 'Нажми «Записать», затем клавишу или сочетание, например Ctrl+F8.', delays: 'Задержки (мс)',
             placeUnit: 'Установка юнита', betweenUnits: 'Между юнитами', upgradeClick: 'Клик улучшения',
@@ -2089,7 +2232,12 @@ body.modal-only .modal-foot {
             vipGuide2: '<b>2.</b> Нажми <b>Regenerate</b>, чтобы создать новую ссылку (или используй существующую)',
             vipGuide3: '<b>3.</b> Скопируй полную ссылку, например:<br><code>https://www.roblox.com/share?code=abc123...&amp;type=Server</code>',
             vipGuide4: '<b>4.</b> Вставь её в поле <b>VIP-ссылка</b> выше',
-            vipGuide5: '<b>5.</b> Включи настройку и нажми <b>Сохранить</b>', cancel: 'Отмена', save: 'Сохранить'
+            vipGuide5: '<b>5.</b> Включи настройку и нажми <b>Сохранить</b>', cancel: 'Отмена', save: 'Сохранить',
+            gameMode: 'Режим', modeInfinite: 'Бесконечный', modeRaid: 'Рейд', modeSummer: 'Летнее событие',
+            mapDetection: 'Распознавание карты', mapDetectionHint: 'Макрос читает заголовок через OCR и сверяет его с каталогами карт режимов. Область захватывает длинные названия целиком.',
+            detectMap: 'Определить карту', captureMapTitle: 'Снять заголовок', mapTitleHint: 'Если карта относится к другому режиму, макрос подскажет, какой режим выбрать. Для OCR не нужно снимать отдельные шаблоны заголовков.',
+            mapDetected: 'Определена', mapNotDetected: 'Не определена', mapOtherMode: 'Найдена в другом режиме', mapNoTitles: 'В этом режиме пока нет шаблонов заголовков',
+            logExpand: 'Развернуть лог', logCollapse: 'Свернуть лог'
         }
     };
     settingsI18n.en.discordBot = 'Discord bot';
@@ -2131,6 +2279,7 @@ body.modal-only .modal-foot {
     var currentFarmHotkey = 'F9';
     var currentRejoinRecordHotkey = 'F1';
     var currentMapChangeHotkey = 'F2';
+    var currentMapDetectHotkey = 'F3';
     function formatHotkeyLabel(value) {
         value = String(value || '');
         var modifiers = '';
@@ -2176,7 +2325,7 @@ body.modal-only .modal-foot {
         }
         if (input && input.select) input.select();
         nativeHotkeyCapture = true;
-        var target = input && input.id === 'setRejoinHotkey' ? 'rejoin' : (input && input.id === 'setMapChangeHotkey' ? 'map-change' : 'farm');
+        var target = input && input.id === 'setRejoinHotkey' ? 'rejoin' : (input && input.id === 'setMapChangeHotkey' ? 'map-change' : (input && input.id === 'setMapDetectHotkey' ? 'map-detect' : 'farm'));
         window.ahkCmd = 'record-hotkey/' + target;
     }
     function uiText(key, fallback) {
@@ -2232,28 +2381,32 @@ body.modal-only .modal-foot {
         if (window.ahkUpdateMap) window.ahkUpdateMap(currentMapName);
         if (window.ahkRejoinRecordState) window.ahkRejoinRecordState(rejoinRecordActive);
         if (window.ahkMapRecordState) window.ahkMapRecordState(mapEntryRecordActive);
-        if (window.ahkSetHotkeys) window.ahkSetHotkeys(currentFarmHotkey, currentRejoinRecordHotkey, currentMapChangeHotkey);
+        if (window.ahkSetHotkeys) window.ahkSetHotkeys(currentFarmHotkey, currentRejoinRecordHotkey, currentMapChangeHotkey, currentMapDetectHotkey);
+        if (window.ahkSetGameMode && modeSelect) window.ahkSetGameMode(modeSelect.value);
     }
     window.ahkSetSettingsLanguage = function (lang) { applySettingsLanguage(lang); };
     window.ahkSetLanguage = function (lang) { applySettingsLanguage(lang); };
-    window.ahkSetHotkeys = function (farmKey, rejoinKey, mapChangeKey) {
+    window.ahkSetHotkeys = function (farmKey, rejoinKey, mapChangeKey, mapDetectKey) {
         currentFarmHotkey = farmKey || 'F9';
         currentRejoinRecordHotkey = rejoinKey || 'F1';
         currentMapChangeHotkey = mapChangeKey || 'F2';
+        currentMapDetectHotkey = mapDetectKey || 'F3';
         var farmInput = document.getElementById('setFarmHotkey');
         var rejoinInput = document.getElementById('setRejoinHotkey');
         var mapChangeInput = document.getElementById('setMapChangeHotkey');
+        var mapDetectInput = document.getElementById('setMapDetectHotkey');
         setHotkeyInputValue(farmInput, currentFarmHotkey);
         setHotkeyInputValue(rejoinInput, currentRejoinRecordHotkey);
         setHotkeyInputValue(mapChangeInput, currentMapChangeHotkey);
+        setHotkeyInputValue(mapDetectInput, currentMapDetectHotkey);
         if (typeof setFarmUI === 'function') setFarmUI(state.farming);
         if (window.ahkRejoinRecordState) window.ahkRejoinRecordState(rejoinRecordActive);
     };
-    window.ahkHotkeyCaptureFinished = function (farmKey, rejoinKey, mapChangeKey) {
+    window.ahkHotkeyCaptureFinished = function (farmKey, rejoinKey, mapChangeKey, mapDetectKey) {
         nativeHotkeyCapture = false;
         var overlay = document.getElementById('hotkeyCaptureOverlay');
         if (overlay) overlay.className = 'hotkey-capture-overlay';
-        if (window.ahkSetHotkeys) window.ahkSetHotkeys(farmKey, rejoinKey, mapChangeKey);
+        if (window.ahkSetHotkeys) window.ahkSetHotkeys(farmKey, rejoinKey, mapChangeKey, mapDetectKey);
         if (activeHotkeyInput) stopHotkeyCapture();
     };
     window.ahkHotkeyCaptureCanceled = function () {
@@ -2266,7 +2419,7 @@ body.modal-only .modal-foot {
         nativeHotkeyCapture = true;
         var overlay = document.getElementById('hotkeyCaptureOverlay');
         var key = document.getElementById('hotkeyCaptureKey');
-        if (key) key.textContent = formatHotkeyLabel(value || (target === 'rejoin' ? currentRejoinRecordHotkey : (target === 'map-change' ? currentMapChangeHotkey : currentFarmHotkey)));
+        if (key) key.textContent = formatHotkeyLabel(value || (target === 'rejoin' ? currentRejoinRecordHotkey : (target === 'map-change' ? currentMapChangeHotkey : (target === 'map-detect' ? currentMapDetectHotkey : currentFarmHotkey))));
         if (overlay) overlay.className = 'hotkey-capture-overlay open';
     };
     window.ahkSetHotkeyCapture = function (value) {
@@ -2361,7 +2514,8 @@ function initSettingsModal(m) {
         var hotkeyCapturePairs = [
             { input: document.getElementById('setFarmHotkey'), button: document.getElementById('btnCaptureFarmHotkey') },
             { input: document.getElementById('setRejoinHotkey'), button: document.getElementById('btnCaptureRejoinHotkey') },
-            { input: document.getElementById('setMapChangeHotkey'), button: document.getElementById('btnCaptureMapChangeHotkey') }
+            { input: document.getElementById('setMapChangeHotkey'), button: document.getElementById('btnCaptureMapChangeHotkey') },
+            { input: document.getElementById('setMapDetectHotkey'), button: document.getElementById('btnCaptureMapDetectHotkey') }
         ];
         for (var hk = 0; hk < hotkeyCapturePairs.length; hk++) {
             (function (pair) {
@@ -2429,7 +2583,8 @@ function initSettingsModal(m) {
                 encodeURIComponent($('#setBotGuildId').value || '__EMPTY__'),
                 encodeURIComponent($('#setBotAllowedUsers').value || '__EMPTY__'),
                 $('#setBotMapPostActionsDelay').value,
-                $('#setFarmMode').value || 'units'
+                $('#setFarmMode').value || 'units',
+                getHotkeyInputValue('#setMapDetectHotkey', 'F3')
             ];
             window.ahkCmd = 'settings-save/' + vals.join('/');
         });
@@ -2492,6 +2647,17 @@ var btnTestDc = document.getElementById('btnTestDisconnected');
         if (btnTestDc) on(btnTestDc, 'click', function () {
             window.ahkCmd = 'test-disconnected';
         });
+        // Map detection: check which map the macro sees and capture a new title
+        var btnDetectMap = document.getElementById('btnDetectMap');
+        if (btnDetectMap) on(btnDetectMap, 'click', function () {
+            var res = document.getElementById('mapDetectResult');
+            if (res) { res.textContent = uiText('loading'); res.style.color = '#888'; }
+            window.ahkCmd = 'detect-map';
+        });
+        var btnCaptureTitle = document.getElementById('btnCaptureMapTitle');
+        if (btnCaptureTitle) on(btnCaptureTitle, 'click', function () {
+            window.ahkCmd = 'capture-title';
+        });
         // Rejoin help guide toggle
         var btnHelp = document.getElementById('btnRejoinHelp');
         var guideEl = document.getElementById('rejoinGuide');
@@ -2538,12 +2704,12 @@ var btnTestDc = document.getElementById('btnTestDisconnected');
     window.ahkLoadSettings = function(cd, scd, ucd, acd, usd, sgd, hd, ms, iv, sgc, sgcv, sgcx, sgcy, sgr,
                                        rjEnabled, rjLink, rjMaxAttempts, rjWaitTimeout, rjPostJoinDelay, rjPostActionsDelay,
                                        msEnabled, zoomScrolls, zoomEnabled, topCameraEnabled, language, farmHotkey, rejoinHotkey,
-                                       botEnabled, botAutoStart, botToken, botGuildId, botAllowedUsers, mapChangeHotkey, botMapPostActionsDelay, farmMode) {
+                                       botEnabled, botAutoStart, botToken, botGuildId, botAllowedUsers, mapChangeHotkey, botMapPostActionsDelay, farmMode, mapDetectHotkey) {
 	        var set = function(id, v) { var el = $(id); if (el) el.value = v; };
 	        var languageSelect = $('#setLanguage');
 	        if (languageSelect) languageSelect.value = (language === 'ru') ? 'ru' : 'en';
 	        applySettingsLanguage(language === 'ru' ? 'ru' : 'en');
-        if (window.ahkSetHotkeys) window.ahkSetHotkeys(farmHotkey || 'F9', rejoinHotkey || 'F1', mapChangeHotkey || 'F2');
+        if (window.ahkSetHotkeys) window.ahkSetHotkeys(farmHotkey || 'F9', rejoinHotkey || 'F1', mapChangeHotkey || 'F2', mapDetectHotkey || 'F3');
 	        set('#setClickDelay', cd); set('#setSlotClickDelay', scd);
 	        set('#setUpgradeClickDelay', ucd); set('#setAutoClickDelay', acd);
         set('#setUnitSleepDelay', usd); set('#setStartGameDelay', sgd);
@@ -3084,34 +3250,42 @@ var btnTestDc = document.getElementById('btnTestDisconnected');
     (function () {
         var bar = document.getElementById('mainDragBar');
         if (!bar) return;
-        bar.style.cursor = 'default';
+        bar.style.cursor = 'move';
         var dragging = false;
+        function endMainDrag() {
+            if (!dragging) return;
+            dragging = false;
+            bar.className = bar.className.replace(/\s*is-dragging\b/g, '');
+            if (bar.releaseCapture) {
+                try { bar.releaseCapture(); } catch (ignore) {}
+            }
+            window.ahkCmd = 'drag-end-main';
+        }
 
-        on(document, 'mousedown', function (e) {
+        on(bar, 'mousedown', function (e) {
             e = e || window.event;
+            var leftButton = e.which ? e.which === 1 : (e.button === 0 || e.button === 1);
+            if (!leftButton || dragging) return;
             var tgt = e.target || e.srcElement;
             var el = tgt;
-            // Check if click is inside the drag bar
-            while (el) {
-                if (el === bar) break;
-                // Don't start drag on buttons
-                if (el.tagName === 'BUTTON') return;
+            while (el && el !== bar) {
+                if (el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'SELECT') return;
                 el = el.parentNode;
             }
-            if (!el) return; // not in drag bar
+            if (el !== bar) return;
             dragging = true;
-            if (bar.setCapture) bar.setCapture();
+            bar.className += ' is-dragging';
+            if (bar.setCapture) {
+                try { bar.setCapture(); } catch (ignore) {}
+            }
             if (e.preventDefault) e.preventDefault();
             e.returnValue = false;
             window.ahkCmd = 'drag-start-main/' + e.screenX + '/' + e.screenY;
         });
 
-        on(document, 'mouseup', function () {
-            if (!dragging) return;
-            dragging = false;
-            if (document.releaseCapture) document.releaseCapture();
-            window.ahkCmd = 'drag-end-main';
-        });
+        on(document, 'mouseup', endMainDrag);
+        on(document, 'dragend', endMainDrag);
+        window.ahkEndMainDrag = endMainDrag;
 
         on(document.getElementById('btnMainMin'), 'click', function () {
             window.ahkCmd = 'minimize-main';

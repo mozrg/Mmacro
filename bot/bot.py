@@ -55,6 +55,9 @@ except ImportError:
 BOT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = BOT_DIR.parent
 SETTINGS_FILE = PROJECT_DIR / "macro" / "ahk" / "settings.ini"
+# Токен — секрет и не должен попадать в settings.ini: этот файл лежит в git.
+# secrets.ini игнорируется git и создаётся макросом при сохранении настроек.
+SECRETS_FILE = PROJECT_DIR / "macro" / "ahk" / "secrets.ini"
 MAPS_DIR = PROJECT_DIR / "macro" / "maps"
 RUNTIME_DIR = BOT_DIR / "runtime"
 COMMANDS_DIR = RUNTIME_DIR / "commands"
@@ -102,6 +105,23 @@ def setting(section: str, key: str, fallback: str = "") -> str:
     return parser.get(section, key, fallback=fallback).strip()
 
 
+def secret(key: str, fallback: str = "") -> str:
+    """Read a value from the git-ignored secrets.ini.
+
+    settings.ini is tracked by git, so secrets must not live there. Older
+    installations still keep the Discord token in settings.ini, so fall back
+    to it until the macro rewrites the value into secrets.ini.
+    """
+
+    parser = configparser.ConfigParser()
+    parser.optionxform = str
+    parser.read(SECRETS_FILE, encoding="utf-8-sig")
+    value = parser.get("DiscordBot", key, fallback="").strip()
+    if value:
+        return value
+    return setting("DiscordBot", key, fallback)
+
+
 def parse_state() -> dict[str, str]:
     result: dict[str, str] = {}
     if not STATE_FILE.exists():
@@ -117,20 +137,36 @@ def parse_state() -> dict[str, str]:
     return result
 
 
-def available_maps() -> list[str]:
-    """Return real map snapshots, without stale state entries or duplicates."""
+def map_dirs() -> list[Path]:
+    """Directories that hold maps: the active game mode, or every mode."""
 
-    if not MAPS_DIR.exists():
+    if not MAPS_DIR.is_dir():
         return []
+    mode = parse_state().get("game_mode", "").strip()
+    active = MAPS_DIR / mode
+    if mode and active.is_dir():
+        return [active]
+    subdirs = [path for path in sorted(MAPS_DIR.iterdir()) if path.is_dir()]
+    return subdirs or [MAPS_DIR]
+
+
+def available_maps() -> list[str]:
+    """Return maps of the active mode: snapshots plus title-only entries."""
+
     names: list[str] = []
     seen: set[str] = set()
-    for path in sorted(MAPS_DIR.glob("*.bmp"), key=lambda item: item.stem.casefold()):
-        name = path.stem.strip()
-        key = name.casefold()
-        if not name or key in seen:
-            continue
-        seen.add(key)
-        names.append(name)
+    for directory in map_dirs():
+        for pattern in ("*_title.bmp", "*_title.png", "*.bmp", "*.png"):
+            for path in sorted(directory.glob(pattern), key=lambda item: item.stem.casefold()):
+                name = path.stem.strip()
+                if name.casefold().endswith("_title"):
+                    name = name[: -len("_title")]
+                name = name.strip()
+                key = name.casefold()
+                if not name or key in seen:
+                    continue
+                seen.add(key)
+                names.append(name)
     return names
 
 
@@ -177,11 +213,19 @@ def command(action: str, argument: str = "", timeout: float = 8.0) -> dict[str, 
 
 def state_message(state: dict[str, str]) -> str:
     running = "запущен" if state.get("running") == "1" else "остановлен"
+    mode = state.get("game_mode") or "не выбран"
     selected = state.get("selected_map") or "не выбрана"
     pending = state.get("pending_map") or "нет"
     runs = state.get("runs", "0")
     recording = state.get("map_record_map") if state.get("map_recording") == "1" else "нет"
-    return f"Фарм: **{running}**\nКарта: **{selected}**\nОжидает смены: **{pending}**\nРанов: **{runs}**\nЗапись входа: **{recording}**"
+    return (
+        f"Режим: **{mode}**\n"
+        f"Фарм: **{running}**\n"
+        f"Карта: **{selected}**\n"
+        f"Ожидает смены: **{pending}**\n"
+        f"Ранов: **{runs}**\n"
+        f"Запись входа: **{recording}**"
+    )
 
 
 def is_mostly_black(path: Path) -> bool:
@@ -281,60 +325,6 @@ def find_roblox_window() -> tuple[int, str] | tuple[None, None]:
     return hwnd, region
 
 
-def activate_roblox_window(hwnd: int | None) -> None:
-    if USER32 is None or not hwnd:
-        return
-    try:
-        USER32.GetForegroundWindow.restype = wintypes.HWND
-        USER32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-        USER32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
-        USER32.SetForegroundWindow.argtypes = [wintypes.HWND]
-        USER32.SetActiveWindow.argtypes = [wintypes.HWND]
-        USER32.BringWindowToTop.argtypes = [wintypes.HWND]
-        USER32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-        USER32.GetParent.argtypes = [wintypes.HWND]
-        USER32.GetParent.restype = wintypes.HWND
-        USER32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
-                                        ctypes.c_int, ctypes.c_int, wintypes.UINT]
-        USER32.SetWindowPos.restype = wintypes.BOOL
-        USER32.SwitchToThisWindow.argtypes = [wintypes.HWND, wintypes.BOOL]
-    except AttributeError:
-        pass
-
-    foreground = USER32.GetForegroundWindow()
-    foreground_pid = wintypes.DWORD()
-    foreground_thread = USER32.GetWindowThreadProcessId(foreground, ctypes.byref(foreground_pid)) if foreground else 0
-    current_thread = KERNEL32.GetCurrentThreadId() if KERNEL32 is not None else 0
-    attached = bool(foreground_thread and current_thread and foreground_thread != current_thread)
-    if attached:
-        USER32.AttachThreadInput(current_thread, foreground_thread, True)
-    parent = USER32.GetParent(hwnd)
-    target = parent or hwnd
-    # Если Roblox встроен в AHK, поднимаем родительское окно и сам дочерний
-    # HWND. Это помогает, когда Discord забрал foreground и обычный
-    # SetForegroundWindow не меняет фактический Z-порядок.
-    swp_flags = 0x0001 | 0x0002 | 0x0040  # SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW
-    USER32.SetWindowPos(target, 0, 0, 0, 0, 0, swp_flags)
-    if parent:
-        USER32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, swp_flags)
-    USER32.ShowWindow(hwnd, 9)  # SW_RESTORE
-    USER32.BringWindowToTop(hwnd)
-    USER32.SetActiveWindow(hwnd)
-    USER32.SetForegroundWindow(hwnd)
-    try:
-        USER32.SwitchToThisWindow(hwnd, True)
-    except AttributeError:
-        pass
-    if attached:
-        USER32.AttachThreadInput(current_thread, foreground_thread, False)
-    time.sleep(0.6)
-    try:
-        active = USER32.GetForegroundWindow()
-        bot_log(f"Roblox activation: requested={hwnd} parent={parent} foreground={active}")
-    except AttributeError:
-        pass
-
-
 def recapture_screen(region: str) -> bool:
     """Capture the visible screen region when Roblox's GDI frame is black."""
 
@@ -360,67 +350,6 @@ def recapture_screen(region: str) -> bool:
     except (AttributeError, OSError, RuntimeError, ValueError):
         return False
     return SCREENSHOT_FILE.exists() and not is_mostly_black(SCREENSHOT_FILE)
-
-
-def recapture_desktop() -> bool:
-    """Capture the current desktop as a last-resort diagnostic screenshot."""
-
-    if Image is None:
-        return False
-    try:
-        if mss is not None:
-            with mss.mss() as screen:
-                monitor = screen.monitors[0]
-                shot = screen.grab(monitor)
-                Image.frombytes("RGB", shot.size, shot.rgb).save(SCREENSHOT_FILE, format="BMP")
-        elif ImageGrab is not None:
-            image = ImageGrab.grab(all_screens=True)
-            image.convert("RGB").save(SCREENSHOT_FILE, format="BMP")
-        else:
-            return False
-    except (AttributeError, OSError, RuntimeError, ValueError):
-        return False
-    return SCREENSHOT_FILE.exists()
-
-
-def _legacy_screenshot_path(raw_path: str = "", region: str = "") -> tuple[Path | None, str]:
-    """Return a Discord-friendly PNG and a diagnostic message on failure."""
-
-    source = Path(raw_path) if raw_path else SCREENSHOT_FILE
-    notice = ""
-    captured_roblox = False
-    for attempt in range(3):
-        hwnd, roblox_region = find_roblox_window()
-        bot_log(f"Roblox window search attempt={attempt + 1}: hwnd={hwnd} region={roblox_region}")
-        if hwnd and roblox_region:
-            activate_roblox_window(hwnd)
-            bot_log(f"trying visible Roblox capture: {roblox_region}")
-            if recapture_screen(roblox_region):
-                source = SCREENSHOT_FILE
-                captured_roblox = True
-                break
-        if attempt < 2:
-            time.sleep(0.5)
-
-    if not captured_roblox:
-        bot_log("Roblox capture failed; trying full desktop diagnostic capture")
-        if recapture_desktop():
-            source = SCREENSHOT_FILE
-            notice = "Roblox не удалось захватить; отправляю текущий экран рабочего стола."
-        else:
-            return None, "Не удалось получить изображение Roblox и текущего рабочего стола."
-    if Image is None:
-        return None, "Для отправки снимка нужен Pillow. Установите зависимости из bot/requirements.txt."
-    try:
-        SCREENSHOT_PNG.unlink(missing_ok=True)
-        with Image.open(source) as image:
-            image.convert("RGB").save(SCREENSHOT_PNG, format="PNG")
-        if not SCREENSHOT_PNG.exists():
-            return None, "PNG-файл снимка не был создан."
-        bot_log(f"screenshot prepared: {SCREENSHOT_PNG} ({SCREENSHOT_PNG.stat().st_size} bytes)")
-        return SCREENSHOT_PNG, notice
-    except (OSError, ValueError) as exc:
-        return None, f"Не удалось подготовить PNG-снимок: {exc}"
 
 
 def screenshot_path(raw_path: str = "", region: str = "") -> tuple[Path | None, str]:
@@ -488,6 +417,11 @@ class MacroBot(commands.Bot):
         if self.guild_id:
             guild = discord.Object(id=self.guild_id)
             self.tree.copy_global_to(guild=guild)
+        else:
+            bot_log(
+                "GuildId is empty: commands are registered globally; "
+                "access is still limited by AllowedUserIds"
+            )
         self._sync_task = asyncio.create_task(self._sync_commands())
 
     async def _sync_commands(self) -> None:
@@ -531,14 +465,32 @@ def allowed_users() -> set[int]:
 
 
 def authorized(interaction: discord.Interaction) -> bool:
+    """Allow-list first: an empty list means "nobody", not "everybody"."""
+
     users = allowed_users()
-    return not users or interaction.user.id in users
+    if not users:
+        return False
+    if interaction.user.id not in users:
+        return False
+    guild_raw = setting("DiscordBot", "GuildId", "")
+    if guild_raw.isdigit() and interaction.guild_id != int(guild_raw):
+        # Команды настроены на один сервер: в чужих серверах и в личных
+        # сообщениях бот не должен управлять макросом.
+        return False
+    return True
 
 
 async def require_authorized(interaction: discord.Interaction) -> bool:
-    if authorized(interaction):
+    users = allowed_users()
+    if not users:
+        message = (
+            "Доступ к боту отключён: в `macro/ahk/settings.ini` не заполнен "
+            "`[DiscordBot] AllowedUserIds`. Укажите свой Discord ID и перезапустите бота."
+        )
+    elif not authorized(interaction):
+        message = "У вас нет доступа к управлению этим макросом."
+    else:
         return True
-    message = "У вас нет доступа к управлению этим макросом."
     if interaction.response.is_done():
         await interaction.followup.send(message, ephemeral=True)
     else:
@@ -561,15 +513,16 @@ def register_commands(bot: MacroBot) -> None:
     async def screenshot(interaction: discord.Interaction) -> None:
         if not await require_authorized(interaction):
             return
-        await interaction.response.defer()
+        # Снимок экрана — приватные данные, поэтому только в ответ вызывающему.
+        await interaction.response.defer(ephemeral=True)
         result = await asyncio.to_thread(command, "screenshot")
         bot_log(f"screenshot command result: ok={result.get('ok')} path={result.get('path', '')} region={result.get('region', '')}")
         if result.get("ok") != "1":
-            await interaction.followup.send(result.get("message", "Не удалось сделать снимок."))
+            await interaction.followup.send(result.get("message", "Не удалось сделать снимок."), ephemeral=True)
             return
         path, error = screenshot_path(result.get("path", ""), result.get("region", ""))
         if not path:
-            await interaction.followup.send(error or "Снимок не найден.")
+            await interaction.followup.send(error or "Снимок не найден.", ephemeral=True)
             return
         try:
             with path.open("rb") as stream:
@@ -577,6 +530,7 @@ def register_commands(bot: MacroBot) -> None:
                 await interaction.followup.send(
                     content=error or result.get("message", "Текущий экран:"),
                     files=[upload],
+                    ephemeral=True,
                 )
             bot_log("screenshot uploaded to Discord")
         except (discord.HTTPException, OSError) as exc:
@@ -598,8 +552,10 @@ def register_commands(bot: MacroBot) -> None:
         if not await require_authorized(interaction):
             return
         values = available_maps()
+        mode = parse_state().get("game_mode", "").strip()
+        header = f"Карты режима **{mode}**:\n" if mode else "Доступные карты:\n"
         await interaction.response.send_message(
-            "Доступные карты:\n" + ("\n".join(f"• {value}" for value in values) if values else "нет карт")
+            header + ("\n".join(f"• {value}" for value in values) if values else "нет карт")
         )
 
     @bot.tree.command(name="map", description="Поставить карту в очередь на следующий раунд")
@@ -615,7 +571,7 @@ def register_commands(bot: MacroBot) -> None:
 def main() -> int:
     ensure_runtime()
     bot_log(f"bot process starting; python={sys.executable}; settings={SETTINGS_FILE}")
-    token = setting("DiscordBot", "Token", "")
+    token = secret("Token", "")
     if not token:
         print("DiscordBot.Token is empty", file=sys.stderr, flush=True)
         bot_log("DiscordBot.Token is empty")
@@ -626,7 +582,15 @@ def main() -> int:
         return 2
     guild_raw = setting("DiscordBot", "GuildId", "")
     guild_id = int(guild_raw) if guild_raw.isdigit() else None
-    bot_log(f"token loaded; token_length={len(token)}; guild_id={guild_id if guild_id else 'global'}")
+    if not allowed_users():
+        message = "DiscordBot.AllowedUserIds is empty — all commands will be denied"
+        print(message, file=sys.stderr, flush=True)
+        bot_log(message)
+    else:
+        scope = f"guild {guild_id}" if guild_id else "any guild (global commands)"
+        bot_log(f"token loaded; token_length={len(token)}; allowed users={len(allowed_users())}; scope={scope}")
+    if guild_id:
+        bot_log(f"slash commands will be synced to guild {guild_id}")
     bot = MacroBot(guild_id)
     register_commands(bot)
     try:

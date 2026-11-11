@@ -12,6 +12,9 @@
 *.tmp
 *.temp
 *.~*
+macro/_preview.bmp
+macro/_click_debug.bmp
+macro/_last_loaded_html_path.txt
 
 # Logs
 *.log
@@ -21,6 +24,8 @@
 .env.local
 *.env.*
 token.ini
+secrets.ini
+*.secrets.*
 
 # Editors
 .vscode/

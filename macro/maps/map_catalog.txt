@@ -1,0 +1,71 @@
+; Единый каталог карт для всех режимов. Добавляй по одному точному названию карты на строку.
+; После этого можно снять заголовок карты кнопкой «Снять заголовок» — отдельный снимок имени не нужен.
+[infinite]
+Planet Greenie
+Walled City
+Snowy Town
+Sand Village
+Navy Bay
+Fiend City
+Spirit World
+Ant Kingdom
+Magic Town
+Haunted Academy
+Magic Hills
+Space Center
+Alien Spaceship
+Fabled Kingdom
+Ruined City
+Puppet Island
+Virtual Dungeon
+Snowy Kingdom
+Dungeon Throne
+Mountain Temple
+Rain Village
+Shibuya District
+
+[raid]
+Future City (Tyrant's Invasion)
+Storm Hideout
+Future City
+Nightmare Train
+Sand Village
+Ant Kingdom (Midnight)
+Sacred Planet
+Strange Town
+Ruined City (The Menace)
+Cursed Festival
+
+[summer]
+Planet Greenie
+Walled City
+Snowy Town
+Sand Village
+Navy Bay
+Fiend City
+Spirit World
+Ant Kingdom
+Magic Town
+Haunted Academy
+Magic Hills
+Space Center
+Alien Spaceship
+Fabled Kingdom
+Ruined City
+Puppet Island
+Virtual Dungeon
+Snowy Kingdom
+Dungeon Throne
+Mountain Temple
+Rain Village
+Shibuya District
+Future City (Tyrant's Invasion)
+Storm Hideout
+Future City
+Nightmare Train
+Sand Village
+Ant Kingdom (Midnight)
+Sacred Planet
+Strange Town
+Ruined City (The Menace)
+Cursed Festival
