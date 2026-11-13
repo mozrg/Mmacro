@@ -1,0 +1,13 @@
+k=10
+gridStep=4
+bigStep=23
+smallR=2
+bigR=5
+nearPx=6
+topMask=0.08
+bottomMask=0.15
+rightMask=0.06
+roadR=-1
+roadG=-1
+roadB=-1
+tol=55
