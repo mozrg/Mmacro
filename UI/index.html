@@ -1616,6 +1616,50 @@ html, body {
 .hotkey-control { display: -ms-flexbox; display: flex; -ms-flex-align: stretch; align-items: stretch; }
 .hotkey-control .hotkey-input { -ms-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; }
 .hotkey-control .hotkey-record { width: auto; margin-left: 6px; -ms-flex-negative: 0; flex-shrink: 0; }
+.hotkey-control .hotkey-record { width: auto; margin-left: 6px; -ms-flex-negative: 0; flex-shrink: 0; }
+.record-fieldset { padding: 14px; }
+.record-fieldset .field-label { margin-bottom: 6px; }
+.record-fieldset .field-hint { margin-top: 10px; color: #8fa2b6; font-size: 11px; line-height: 1.55; }
+.record-target-grid { margin-top: 12px; margin-bottom: 2px; }
+.record-target-grid .field { margin-bottom: 10px; }
+.record-fieldset .record-target-hint { margin-top: 4px; }
+.record-select { width: 100%; z-index: 50; }
+.record-select .custom-select-list {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 300;
+    margin-top: 6px; padding: 3px 0;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.36);
+}
+.record-select .custom-select-btn { height: 33px; }
+.record-select .custom-select-item { padding: 8px 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#recordModeLabel, #recordMapLabel {
+    display: block; min-width: 0; overflow: hidden;
+    white-space: nowrap; text-overflow: ellipsis;
+}
+.record-fieldset .record-actions-row { margin-top: 16px; padding-top: 14px; }
+.record-delay-field { max-width: 220px; margin-top: 14px; }
+.record-actions-row {
+    display: -ms-flexbox; display: flex;
+    -ms-flex-wrap: wrap; flex-wrap: wrap;
+    -ms-flex-align: end; align-items: flex-end;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #1d2834;
+}
+.record-hotkey { width: 200px; -ms-flex-negative: 0; flex-shrink: 0; margin-right: 12px; }
+.record-hotkey .hotkey-control { margin-top: 4px; }
+.record-buttons {
+    display: -ms-flexbox; display: flex;
+    -ms-flex-wrap: wrap; flex-wrap: wrap;
+    -ms-flex-align: center; align-items: center;
+    padding-bottom: 1px;
+}
+.record-buttons .btn { width: auto; margin-right: 6px; margin-bottom: 4px; }
+#btnFarmRecord { min-width: 128px; }
+#btnFarmRecord:disabled, #btnClearFarmRecord:disabled { cursor: not-allowed; }
+#btnFarmRecord:disabled { background: #18232e; border-color: #263342; color: #758496; opacity: 1; }
+#btnFarmRecord.recording { border-color: #8b484f; background: #351b20; color: #ffd0d0; }
+.record-buttons .rejoin-action-count { margin-left: 2px; margin-bottom: 4px; }
+#recordMapField.is-hidden { display: none; }
 .color-swatch { width: 32px; height: 32px; border: 1px solid #344457; border-radius: 6px; }
 .color-swatch:hover { border-color: #3f83fb; }
 .rejoin-guide {
@@ -2127,6 +2171,7 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
             <nav class="settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical">
                 <button type="button" class="settings-tab is-active" data-settings-tab="general" data-i18n="settingsTabGeneral" role="tab" aria-selected="true">General</button>
                 <button type="button" class="settings-tab" data-settings-tab="map" data-i18n="settingsTabMap" role="tab" aria-selected="false">Map</button>
+                <button type="button" class="settings-tab" data-settings-tab="record" data-i18n="settingsTabRecord" role="tab" aria-selected="false">Recording</button>
                 <button type="button" class="settings-tab" data-settings-tab="timings" data-i18n="settingsTabTimings" role="tab" aria-selected="false">Timings</button>
                 <button type="button" class="settings-tab" data-settings-tab="camera" data-i18n="settingsTabCamera" role="tab" aria-selected="false">Camera</button>
                 <button type="button" class="settings-tab" data-settings-tab="discord" data-i18n="settingsTabDiscord" role="tab" aria-selected="false">Discord</button>
@@ -2176,21 +2221,59 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
                     <div class="field-hint" id="mapDetectResult" style="margin-top:8px;">&mdash;</div>
                     <div class="field-hint" data-i18n="mapTitleHint">If the title belongs to another mode, the macro will tell you which mode to select. OCR does not require separate title templates.</div>
                 </fieldset>
+                <fieldset class="fieldset record-fieldset">
+                    <legend class="fieldset-legend" data-i18n="actionsRecord">Actions recording</legend>
+                    <div class="field-hint" data-i18n="actionsRecordHint">Choose a mode and a map (if the mode has maps), then press the hotkey to start and stop recording. Saved actions play when you start the farm with F9.</div>
+                    <div class="form-grid record-target-grid">
+                        <div class="field">
+                            <div class="field-label" id="recordModeFieldLabel" data-i18n="recordMode">Mode</div>
+                            <div class="select-wrap custom-select record-select" id="recordModeCustomSelect">
+                                <button type="button" class="select custom-select-btn" id="recordModeBtn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="recordModeFieldLabel recordModeLabel">
+                                    <span id="recordModeLabel">Infinite</span>
+                                    <svg class="select-chevron" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+                                </button>
+                                <div class="custom-select-list" id="recordModeList" role="listbox" aria-labelledby="recordModeFieldLabel"></div>
+                                <select id="setRecordMode" style="display:none">
+                                    <option value="infinite" data-i18n="modeInfinite">Infinite</option>
+                                    <option value="raid" data-i18n="modeRaid">Raid</option>
+                                    <option value="summer" data-i18n="modeSummer">Summer Event</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="field" id="recordMapField">
+                            <div class="field-label" id="recordMapFieldLabel" data-i18n="recordMap">Map</div>
+                            <div class="select-wrap custom-select record-select" id="recordMapCustomSelect">
+                                <button type="button" class="select custom-select-btn" id="recordMapBtn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="recordMapFieldLabel recordMapLabel">
+                                    <span id="recordMapLabel" data-i18n="selectMap">-- Select map --</span>
+                                    <svg class="select-chevron" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+                                </button>
+                                <div class="custom-select-list" id="recordMapList" role="listbox" aria-labelledby="recordMapFieldLabel"></div>
+                                <select id="setRecordMap" style="display:none"></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field-hint record-target-hint" id="recordTargetHint" data-i18n="recordSelectMode">Select a mode to enable recording.</div>
+                    <div class="record-actions-row">
+                        <div class="record-hotkey">
+                            <label class="field-label" for="setMapChangeHotkey" data-i18n="recordHotkey">Record hotkey</label>
+                            <div class="hotkey-control"><input type="text" class="input hotkey-input" id="setMapChangeHotkey" value="F2" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureMapChangeHotkey" data-i18n="changeHotkey">Change</button></div>
+                        </div>
+                        <div class="record-buttons">
+                            <button class="btn btn-primary btn-sm" id="btnFarmRecord" data-i18n="startRecording" disabled>Start recording</button>
+                            <button class="btn btn-secondary btn-sm" id="btnClearFarmRecord" data-i18n="clear" disabled>Clear</button>
+                            <span class="rejoin-action-count" id="farmRecordCount">0</span>
+                        </div>
+                    </div>
+                    <div class="field record-delay-field"><label class="field-label" for="setBotMapPostActionsDelay" data-i18n="recordActionsDelay">Delay after actions (s)</label><input type="number" class="input" id="setBotMapPostActionsDelay" value="3" min="0" step="0.1"></div>
+                </fieldset>
                 <fieldset class="fieldset">
                     <legend class="fieldset-legend" data-i18n="hotkeys">Hotkeys</legend>
                     <div class="form-grid">
                         <div class="field"><label class="field-label" for="setFarmHotkey" data-i18n="farmHotkey">Start / Stop Farm</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setFarmHotkey" value="F9" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureFarmHotkey" data-i18n="recordKey">Record</button></div></div>
                         <div class="field"><label class="field-label" for="setRejoinHotkey" data-i18n="rejoinHotkey">Rejoin Record</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setRejoinHotkey" value="F1" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureRejoinHotkey" data-i18n="recordKey">Record</button></div></div>
-                        <div class="field"><label class="field-label" for="setMapChangeHotkey" data-i18n="mapChangeHotkey">Map Entry Record</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setMapChangeHotkey" value="F2" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureMapChangeHotkey" data-i18n="recordKey">Record</button></div></div>
                         <div class="field"><label class="field-label" for="setMapDetectHotkey" data-i18n="mapDetectHotkey">Check map</label><div class="hotkey-control"><input type="text" class="input hotkey-input" id="setMapDetectHotkey" value="F3" readonly autocomplete="off"><button type="button" class="btn btn-ghost btn-sm hotkey-record" id="btnCaptureMapDetectHotkey" data-i18n="recordKey">Record</button></div></div>
                     </div>
                     <div class="field-hint" data-i18n="hotkeyHint">Click Record, then press a key or combination, for example Ctrl+F8.</div>
-                    <div class="rejoin-actions-row" style="margin-top:8px;">
-                        <span class="field-label" data-i18n="mapEntryActions" style="display:inline; margin-right:6px;">Map Entry Actions:</span>
-                        <button class="btn btn-primary btn-sm" id="btnMapEntryRecord" data-i18n="record">Record</button>
-                        <span class="rejoin-action-count" id="mapEntryActionCount" style="color:#758496; font-size:10px; margin-left:6px;">0 actions</span>
-                    </div>
-                    <div class="field" style="margin-top:10px; max-width:180px;"><label class="field-label" for="setBotMapPostActionsDelay" data-i18n="mapEntryActionsDelay">Map Entry Actions Delay (s)</label><input type="number" class="input" id="setBotMapPostActionsDelay" value="3" min="0" step="0.1"></div>
                 </fieldset>
                 <fieldset class="fieldset">
                     <legend class="fieldset-legend" data-i18n="discordBot">Discord bot</legend>
@@ -3206,7 +3289,7 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
     window.ahkClearLog = function () { if (logBox) logBox.innerHTML = ''; };
 
     /* ---- Settings tabs ---- */
-    var settingsGroups = ['general', 'general', 'map', 'general', 'discord', 'timings', 'camera', 'timings', 'timings', 'rejoin'];
+    var settingsGroups = ['general', 'general', 'map', 'record', 'general', 'discord', 'timings', 'camera', 'timings', 'timings', 'rejoin'];
     var settingsTabsReady = false;
     function activateSettingsTab(name) {
         var modal = document.getElementById('modal-settings');
@@ -3423,6 +3506,16 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
             vipGuide4: '<b>4.</b> Paste it into the <b>VIP Share Link</b> field above',
             vipGuide5: '<b>5.</b> Check <b>Enabled</b> and click <b>Save</b>', cancel: 'Cancel', save: 'Save',
             gameMode: 'Mode', modeInfinite: 'Infinite', modeRaid: 'Raid', modeSummer: 'Summer Event',
+            actionsRecord: 'Actions recording',
+            actionsRecordHint: 'Choose a mode and a map. Press the record hotkey to start or stop recording. Clicks, wheel and keyboard keys (including holds) are recorded; actions play when you start the farm with F9.',
+            recordMode: 'Mode', recordMap: 'Map',
+            recordSelectMode: 'Select a mode to enable recording.',
+            recordSelectMap: 'Select a map to enable recording.',
+            recordReady: 'Press {key} to start recording. It also works after closing Settings.',
+            recordSummerReady: 'Summer Event has no map, so actions are saved for the mode. Press {key} to start recording; it also works after closing Settings.',
+            recordHotkey: 'Record hotkey', changeHotkey: 'Change', startRecording: 'Start recording', stopRecording: 'Stop recording',
+            recordActionsDelay: 'Delay after actions (s)',
+            recordingFor: 'Recording for', actionsSavedFor: 'Actions saved for',
             mapDetection: 'Map detection', mapDetectionHint: 'Windows OCR reads the title and checks it against map catalogs. The capture area includes long map names.',
             detectMap: 'Detect map', captureMapTitle: 'Capture title', mapTitleHint: 'If the title belongs to another mode, the macro will tell you which mode to select. OCR does not require separate title templates.',
             mapDetected: 'Detected', mapNotDetected: 'Not detected', mapOtherMode: 'Found in another mode', mapNoTitles: 'No title templates in this mode yet',
@@ -3491,6 +3584,16 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
             vipGuide4: '<b>4.</b> Вставь её в поле <b>VIP-ссылка</b> выше',
             vipGuide5: '<b>5.</b> Включи настройку и нажми <b>Сохранить</b>', cancel: 'Отмена', save: 'Сохранить',
             gameMode: 'Режим', modeInfinite: 'Бесконечный', modeRaid: 'Рейд', modeSummer: 'Летнее событие',
+            actionsRecord: 'Запись действий',
+            actionsRecordHint: 'Выбери режим и карту. Нажми клавишу записи, чтобы начать или остановить запись. Записываются клики, колесо и клавиши с удержаниями; действия сохранятся для этой цели и будут воспроизведены при запуске фарма по F9.',
+            recordMode: 'Режим', recordMap: 'Карта',
+            recordSelectMode: 'Выбери режим, чтобы включить запись.',
+            recordSelectMap: 'Выбери карту, чтобы включить запись.',
+            recordReady: 'Нажми {key}, чтобы начать запись. Она работает и после закрытия настроек.',
+            recordSummerReady: 'В Summer Event нет карты — действия сохранятся на режим. Нажми {key}, чтобы начать запись; она работает и после закрытия настроек.',
+            recordHotkey: 'Клавиша записи', changeHotkey: 'Изменить', startRecording: 'Начать запись', stopRecording: 'Остановить запись',
+            recordActionsDelay: 'Задержка после действий (с)',
+            recordingFor: 'Запись для', actionsSavedFor: 'Действия сохранены для',
             mapDetection: 'Распознавание карты', mapDetectionHint: 'Макрос читает заголовок через OCR и сверяет его с каталогами карт режимов. Область захватывает длинные названия целиком.',
             detectMap: 'Определить карту', captureMapTitle: 'Снять заголовок', mapTitleHint: 'Если карта относится к другому режиму, макрос подскажет, какой режим выбрать. Для OCR не нужно снимать отдельные шаблоны заголовков.',
             mapDetected: 'Определена', mapNotDetected: 'Не определена', mapOtherMode: 'Найдена в другом режиме', mapNoTitles: 'В этом режиме пока нет шаблонов заголовков',
@@ -3540,6 +3643,7 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
     settingsI18n.en.cardVoteSummary = 'Summer Event \u00b7 priority list';
     settingsI18n.en.settingsTabGeneral = 'General';
     settingsI18n.en.settingsTabMap = 'Map';
+    settingsI18n.en.settingsTabRecord = 'Recording';
     settingsI18n.en.settingsTabTimings = 'Timings';
     settingsI18n.en.settingsTabCamera = 'Camera';
     settingsI18n.en.settingsTabDiscord = 'Discord';
@@ -3553,6 +3657,7 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
     settingsI18n.ru.cardVoteSummary = '\u041b\u0435\u0442\u043d\u0435\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u0435 \u00b7 \u0441\u043f\u0438\u0441\u043e\u043a \u043f\u0440\u0438\u043e\u0440\u0438\u0442\u0435\u0442\u0430';
     settingsI18n.ru.settingsTabGeneral = '\u041e\u0441\u043d\u043e\u0432\u043d\u043e\u0435';
     settingsI18n.ru.settingsTabMap = '\u041a\u0430\u0440\u0442\u0430';
+    settingsI18n.ru.settingsTabRecord = '\u0417\u0430\u043f\u0438\u0441\u044c';
     settingsI18n.ru.settingsTabTimings = '\u0417\u0430\u0434\u0435\u0440\u0436\u043a\u0438';
     settingsI18n.ru.settingsTabCamera = '\u041a\u0430\u043c\u0435\u0440\u0430';
     settingsI18n.ru.settingsTabDiscord = 'Discord';
@@ -3577,6 +3682,8 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
     var currentRejoinRecordHotkey = 'F1';
     var currentMapChangeHotkey = 'F2';
     var currentMapDetectHotkey = 'F3';
+    var recordMapCatalog = [];
+    var recordState = { mode: '', map: '', ready: false, hotkey: 'F2', count: 0, active: false };
     function formatHotkeyLabel(value) {
         value = String(value || '');
         var modifiers = '';
@@ -3629,6 +3736,228 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
         var dict = settingsI18n[currentLanguage] || settingsI18n.en;
         return dict[key] !== undefined ? dict[key] : (fallback || key);
     }
+    function formatActionsCount(count) {
+        count = parseInt(count, 10) || 0;
+        if (currentLanguage === 'ru') {
+            var n10 = count % 10;
+            var n100 = count % 100;
+            if (n10 === 1 && n100 !== 11) return count + ' действие';
+            if (n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)) return count + ' действия';
+            return count + ' действий';
+        }
+        return count + (count === 1 ? ' action' : ' actions');
+    }
+    function recordModeLabel(mode) {
+        if (mode === 'raid') return uiText('modeRaid');
+        if (mode === 'summer') return uiText('modeSummer');
+        if (mode === 'infinite') return uiText('modeInfinite');
+        return '';
+    }
+    function recordTargetLabel(mode, map) {
+        var label = recordModeLabel(mode);
+        if (mode !== 'summer' && map) label += ' \u00b7 ' + map;
+        return label;
+    }
+    function fillRecordMapSelect(list, selected) {
+        var sel = document.getElementById('setRecordMap');
+        if (!sel) return;
+        sel.innerHTML = '';
+        var placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = uiText('selectMap');
+        sel.appendChild(placeholder);
+        for (var i = 0; i < list.length; i++) {
+            var opt = document.createElement('option');
+            opt.value = list[i];
+            opt.textContent = list[i];
+            sel.appendChild(opt);
+        }
+        if (selected) {
+            var found = false;
+            for (var j = 0; j < sel.options.length; j++) {
+                if (sel.options[j].value === selected) { found = true; break; }
+            }
+            sel.value = found ? selected : '';
+        } else {
+            sel.value = '';
+        }
+    }
+    var recordSelectsReady = false;
+    function closeRecordCustomSelects() {
+        var modeList = document.getElementById('recordModeList');
+        var mapList = document.getElementById('recordMapList');
+        var modeBtn = document.getElementById('recordModeBtn');
+        var mapBtn = document.getElementById('recordMapBtn');
+        if (modeList) modeList.className = 'custom-select-list';
+        if (mapList) mapList.className = 'custom-select-list';
+        if (modeBtn) modeBtn.setAttribute('aria-expanded', 'false');
+        if (mapBtn) mapBtn.setAttribute('aria-expanded', 'false');
+    }
+    function syncRecordModeCustomUI() {
+        var sel = document.getElementById('setRecordMode');
+        var list = document.getElementById('recordModeList');
+        var label = document.getElementById('recordModeLabel');
+        if (!sel || !list) return;
+        list.innerHTML = '';
+        for (var i = 0; i < sel.options.length; i++) {
+            (function (opt) {
+                var item = document.createElement('div');
+                item.className = 'custom-select-item' + (opt.value === sel.value ? ' active' : '');
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', opt.value === sel.value ? 'true' : 'false');
+                item.textContent = opt.text;
+                item.title = opt.text;
+                on(item, 'click', function () {
+                    if (sel.value !== opt.value) {
+                        sel.value = opt.value;
+                        fireChange(sel);
+                    }
+                    closeRecordCustomSelects();
+                    syncRecordModeCustomUI();
+                });
+                list.appendChild(item);
+            })(sel.options[i]);
+        }
+        if (label) {
+            label.textContent = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+            if (label.parentNode) label.parentNode.title = label.textContent;
+        }
+    }
+    function syncRecordMapCustomUI() {
+        var sel = document.getElementById('setRecordMap');
+        var list = document.getElementById('recordMapList');
+        var label = document.getElementById('recordMapLabel');
+        if (!sel || !list) return;
+        list.innerHTML = '';
+        for (var i = 0; i < sel.options.length; i++) {
+            (function (opt) {
+                var item = document.createElement('div');
+                item.className = 'custom-select-item' + (opt.value === sel.value ? ' active' : '');
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', opt.value === sel.value ? 'true' : 'false');
+                item.textContent = opt.text;
+                item.title = opt.text;
+                on(item, 'click', function () {
+                    if (sel.value !== opt.value) {
+                        sel.value = opt.value;
+                        fireChange(sel);
+                    }
+                    closeRecordCustomSelects();
+                    syncRecordMapCustomUI();
+                });
+                list.appendChild(item);
+            })(sel.options[i]);
+        }
+        if (label) {
+            label.textContent = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+            if (label.parentNode) label.parentNode.title = label.textContent;
+        }
+    }
+    function initRecordCustomSelects() {
+        if (recordSelectsReady) return;
+        var modeBtn = document.getElementById('recordModeBtn');
+        var modeList = document.getElementById('recordModeList');
+        var mapBtn = document.getElementById('recordMapBtn');
+        var mapList = document.getElementById('recordMapList');
+        if (!modeBtn || !modeList) return;
+        recordSelectsReady = true;
+        on(modeBtn, 'click', function (e) {
+            e = e || window.event;
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            closeRecordCustomSelects();
+            modeList.className = 'custom-select-list open';
+            modeBtn.setAttribute('aria-expanded', 'true');
+        });
+        if (mapBtn && mapList) {
+            on(mapBtn, 'click', function (e) {
+                e = e || window.event;
+                if (e.preventDefault) e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
+                closeRecordCustomSelects();
+                mapList.className = 'custom-select-list open';
+                mapBtn.setAttribute('aria-expanded', 'true');
+            });
+        }
+        on(document, 'click', function (e) {
+            var tgt = (e || window.event).target || (e || window.event).srcElement;
+            if (modeBtn && modeList && tgt !== modeBtn && !modeBtn.contains(tgt) && tgt !== modeList && !modeList.contains(tgt) &&
+                (!mapBtn || (tgt !== mapBtn && !mapBtn.contains(tgt) && tgt !== mapList && !mapList.contains(tgt))))
+                closeRecordCustomSelects();
+        });
+        syncRecordModeCustomUI();
+        syncRecordMapCustomUI();
+    }
+    function syncActionsRecordUI() {
+        var modeSel = document.getElementById('setRecordMode');
+        var mapSel = document.getElementById('setRecordMap');
+        var mapField = document.getElementById('recordMapField');
+        var hint = document.getElementById('recordTargetHint');
+        var btn = document.getElementById('btnFarmRecord');
+        var clearBtn = document.getElementById('btnClearFarmRecord');
+        var countEl = document.getElementById('farmRecordCount');
+        var hotkeyInput = document.getElementById('setMapChangeHotkey');
+        var captureBtn = document.getElementById('btnCaptureMapChangeHotkey');
+        if (!modeSel) return;
+        var mode = recordState.mode || modeSel.value || '';
+        var map = (mode === 'summer') ? '' : (recordState.map || '');
+        var hasMap = mode && mode !== 'summer';
+        if (mapSel) fillRecordMapSelect(recordMapCatalog, recordState.map);
+        if (mapField) mapField.className = 'field' + (hasMap ? '' : ' is-hidden');
+        if (modeSel) modeSel.disabled = recordState.active;
+        if (mapSel) mapSel.disabled = recordState.active;
+        if (hotkeyInput) {
+            hotkeyInput.disabled = !recordState.ready;
+            setHotkeyInputValue(hotkeyInput, recordState.hotkey || 'F2');
+        }
+        if (captureBtn) captureBtn.disabled = !recordState.ready;
+        if (btn) {
+            btn.disabled = !recordState.ready;
+            btn.textContent = recordState.active ? uiText('stopRecording') : uiText('startRecording');
+            btn.className = 'btn btn-primary btn-sm' + (recordState.active ? ' recording' : '');
+        }
+        if (clearBtn) clearBtn.disabled = recordState.active || !recordState.ready || recordState.count < 1;
+        if (countEl) countEl.textContent = formatActionsCount(recordState.count);
+        if (hint) {
+            if (recordState.active) {
+                hint.textContent = uiText('recordingFor') + ' ' + recordTargetLabel(recordState.mode, recordState.map) + ' \u2014 ' + uiText('stopRecording');
+            } else if (!mode) {
+                hint.textContent = uiText('recordSelectMode');
+            } else if (mode !== 'summer' && !map) {
+                hint.textContent = uiText('recordSelectMap');
+            } else if (mode === 'summer') {
+                hint.textContent = uiText('recordSummerReady').replace('{key}', recordState.hotkey || 'F2');
+            } else {
+                hint.textContent = uiText('recordReady').replace('{key}', recordState.hotkey || 'F2');
+            }
+        }
+        var modeBtn = document.getElementById('recordModeBtn');
+        var mapBtn = document.getElementById('recordMapBtn');
+        if (modeBtn) modeBtn.disabled = recordState.active;
+        if (mapBtn) mapBtn.disabled = recordState.active;
+        if (recordState.active) closeRecordCustomSelects();
+        syncRecordModeCustomUI();
+        syncRecordMapCustomUI();
+    }
+    initRecordCustomSelects();
+    window.ahkSetRecordMapOptions = function (list) {
+        recordMapCatalog = list ? String(list).split('|') : [];
+        fillRecordMapSelect(recordMapCatalog, recordState.map);
+        syncActionsRecordUI();
+    };
+    window.ahkRecordState = function (mode, map, ready, hotkey, count, active) {
+        recordState.mode = mode || '';
+        recordState.map = (recordState.mode === 'summer') ? '' : (map || '');
+        recordState.ready = (ready === true || ready === 'true' || ready === 1 || ready === '1');
+        recordState.hotkey = hotkey || 'F2';
+        recordState.count = parseInt(count, 10) || 0;
+        recordState.active = (active === true || active === 'true' || active === 1 || active === '1');
+        var modeSel = document.getElementById('setRecordMode');
+        var mapSel = document.getElementById('setRecordMap');
+        if (modeSel && recordState.mode) modeSel.value = recordState.mode;
+        if (mapSel) fillRecordMapSelect(recordMapCatalog, recordState.map);
+        syncActionsRecordUI();
+    };
     function renderRunCount() {
         var el = document.getElementById('runCount');
         if (el) el.textContent = uiText('runs', 'Runs') + ': ' + currentRunCount;
@@ -3682,10 +4011,12 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
         if (window.ahkUpdateCoords) window.ahkUpdateCoords(currentCoords[0], currentCoords[1], currentCoords[2], currentCoords[3]);
         if (window.ahkUpdateMap) window.ahkUpdateMap(currentMapName);
         if (typeof syncSettingsFarmModeUI === 'function') syncSettingsFarmModeUI();
+        if (typeof syncActionsRecordUI === 'function') syncActionsRecordUI();
         if (window.ahkRejoinRecordState) window.ahkRejoinRecordState(rejoinRecordActive);
         if (window.ahkMapRecordState) window.ahkMapRecordState(mapEntryRecordActive);
         if (window.ahkSetHotkeys) window.ahkSetHotkeys(currentFarmHotkey, currentRejoinRecordHotkey, currentMapChangeHotkey, currentMapDetectHotkey);
         if (window.ahkSetGameMode && modeSelect) window.ahkSetGameMode(modeSelect.value);
+        syncActionsRecordUI();
         updateRunContext();
         updateRunTitle();
     }
@@ -3704,6 +4035,8 @@ body.modal-only .modal-body::-webkit-scrollbar-thumb { background: #344253; bord
         setHotkeyInputValue(rejoinInput, currentRejoinRecordHotkey);
         setHotkeyInputValue(mapChangeInput, currentMapChangeHotkey);
         setHotkeyInputValue(mapDetectInput, currentMapDetectHotkey);
+        recordState.hotkey = currentMapChangeHotkey;
+        syncActionsRecordUI();
         if (typeof setFarmUI === 'function') setFarmUI(state.farming);
         if (window.ahkRejoinRecordState) window.ahkRejoinRecordState(rejoinRecordActive);
     };
@@ -4002,10 +4335,31 @@ var btnTestDc = document.getElementById('btnTestDisconnected');
         if (btnClear2) on(btnClear2, 'click', function () {
             window.ahkCmd = 'clear-rejoin';
         });
-        var btnMapEntryRecord = document.getElementById('btnMapEntryRecord');
-        if (btnMapEntryRecord) on(btnMapEntryRecord, 'click', function () {
-            window.ahkCmd = 'record-map-entry';
+        var recordModeSel = document.getElementById('setRecordMode');
+        if (recordModeSel) on(recordModeSel, 'change', function () {
+            recordState.mode = recordModeSel.value || '';
+            recordState.map = '';
+            recordState.ready = false;
+            recordMapCatalog = [];
+            syncActionsRecordUI();
+            window.ahkCmd = 'record-target/' + recordState.mode + '/';
         });
+        var recordMapSel = document.getElementById('setRecordMap');
+        if (recordMapSel) on(recordMapSel, 'change', function () {
+            recordState.map = recordMapSel.value || '';
+            recordState.ready = false;
+            syncActionsRecordUI();
+            window.ahkCmd = 'record-target/' + (recordState.mode || '') + '/' + encodeURIComponent(recordState.map);
+        });
+        var btnFarmRecord = document.getElementById('btnFarmRecord');
+        if (btnFarmRecord) on(btnFarmRecord, 'click', function () {
+            window.ahkCmd = 'record-farm-actions';
+        });
+        var btnClearFarmRecord = document.getElementById('btnClearFarmRecord');
+        if (btnClearFarmRecord) on(btnClearFarmRecord, 'click', function () {
+            window.ahkCmd = 'clear-farm-actions';
+        });
+        syncActionsRecordUI();
     }
     window.ahkLoadSettings = function(cd, scd, ucd, acd, usd, sgd, hd, ms, iv, sgc, sgcv, sgcx, sgcy, sgr,
                                        rjEnabled, rjLink, rjMaxAttempts, rjWaitTimeout, rjPostJoinDelay, rjPostActionsDelay,
@@ -4458,17 +4812,7 @@ var btnTestDc = document.getElementById('btnTestDisconnected');
             btn.style.borderColor = active ? '#8a3a40' : '';
         }
     };
-    window.ahkMapRecordState = function (active, mapName, count) {
-        mapEntryRecordActive = !!active;
-        var btn = document.getElementById('btnMapEntryRecord');
-        if (btn) {
-            btn.textContent = active ? uiText('stop') : uiText('record') + ' ' + formatHotkeyLabel(currentMapChangeHotkey);
-            btn.style.background = active ? '#3a2024' : '';
-            btn.style.borderColor = active ? '#8a3a40' : '';
-        }
-        var countEl = document.getElementById('mapEntryActionCount');
-        if (countEl && count !== undefined) countEl.textContent = String(count) + ' actions';
-    };
+    window.ahkMapRecordState = function (active, mapName, count) {};
 
     /* ---- Update status bridge (called from AHK via execScript) ---- */
     window.ahkUpdateVersion = function (text, isNew) {

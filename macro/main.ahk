@@ -130,12 +130,24 @@ BotRunning := false
 PendingMapChange := ""
 BotMapRecordActive := false
 BotMapRecordMap := ""
+BotMapRecordMode := ""
 BotMapRecordActions := []
 BotMapRecordLastTime := 0
 BotMapRecordLastX := 0
 BotMapRecordLastY := 0
 BotMapRecordPending := false
 BotMapActions := []
+
+; ---- Запись действий фарма: режим + карта (для Summer Event — только режим) ----
+FarmRecordMode := ""
+FarmRecordMap := ""
+FarmRecordActive := false
+FarmRecordActions := []
+FarmRecordLastTime := 0
+FarmRecordPending := false
+FarmRecordKeyHotkeys := []
+FarmKeyDownMap := {}
+RecordSettingsOpen := false
 
 IfNotExist, %BotRuntimeDir%
     FileCreateDir, %BotRuntimeDir%
@@ -292,6 +304,13 @@ ApplyConfiguredHotkeys()
 MigrateMapsLayout()
 ReloadMapList()
 LoadAllMapCoords()
+; Цель записи действий по умолчанию — текущий режим (карта выбирается в настройках).
+FarmRecordMode := GameMode
+if (GameMode = "summer")
+    FarmRecordMap := ""
+else
+    FarmRecordMap := SelectedMapCtl
+UpdateRecordHotkeyState()
 LoadCardCatalog()
 LoadCardPriority()
 UpdateCardVoteTimer()
@@ -567,6 +586,7 @@ LoadSettings() {
     global StartGameColor, StartGameColorVar, StartGameCenterX, StartGameCenterY, StartGameRadius
     global AutoUpgradePriority, AutoUpgradeUnitOffsetY, AutoUpgradeEnabled
     global FarmMode
+    global FarmRecordMode, FarmRecordMap
     global RejoinEnabled, RejoinShareLink, RejoinMaxAttempts, RejoinWaitTimeout, RejoinPostJoinDelay
     global RejoinPostActionsDelay, BotMapPostActionsDelay
     global BotToken, BotEnabled, BotAutoStart, BotGuildId, BotAllowedUserIds
@@ -628,6 +648,13 @@ LoadSettings() {
     IniRead, v, %SettingsFile%, Game, Mode, %GameMode%
     GameMode := IsValidGameMode(v) ? v : "infinite"
 
+    IniRead, v, %SettingsFile%, FarmRecord, Mode, ""
+    FarmRecordMode := IsValidGameMode(v) ? v : ""
+    IniRead, v, %SettingsFile%, FarmRecord, Map, ""
+    FarmRecordMap := (v = "ERROR") ? "" : v
+    if (FarmRecordMode = "summer" || FarmRecordMode = "")
+        FarmRecordMap := ""
+
     IniRead, v, %SettingsFile%, CardVote, Enabled, %CardVoteEnabled%
     CardVoteEnabled := (v = 1 || v = "true") ? true : false
 
@@ -661,6 +688,7 @@ LoadSettings() {
 
 SaveSettings() {
     global SettingsFile, ClickDelay, SlotClickDelay, UpgradeClickDelay
+    global FarmRecordMode, FarmRecordMap
     global AutoClickDelay, UnitSleepDelay, StartGameDelay, HoverDelay, MouseSpeed, MouseSpeedEnabled, ZoomEnabled, ZoomScrolls, TopCameraEnabled, ImgVariation
     global StartGameColor, StartGameColorVar, StartGameCenterX, StartGameCenterY, StartGameRadius
     global AutoUpgradePriority, AutoUpgradeUnitOffsetY, AutoUpgradeEnabled
@@ -693,6 +721,8 @@ SaveSettings() {
     IniWrite, % (AutoUpgradeEnabled ? 1 : 0), %SettingsFile%, AutoUpgrade, Enabled
     IniWrite, %FarmMode%, %SettingsFile%, Farm, Mode
     IniWrite, %GameMode%, %SettingsFile%, Game, Mode
+    IniWrite, %FarmRecordMode%, %SettingsFile%, FarmRecord, Mode
+    IniWrite, %FarmRecordMap%, %SettingsFile%, FarmRecord, Map
     IniWrite, % (CardVoteEnabled ? 1 : 0), %SettingsFile%, CardVote, Enabled
 
     IniWrite, % (RejoinEnabled ? 1 : 0), %SettingsFile%, Rejoin, Enabled
@@ -789,6 +819,7 @@ PushMapDetectResult(mapName, score, otherMap := "", otherMode := "") {
 ; Сохраняет шаблон заголовка выбранной карты и его позицию в кадре.
 SaveMapTitle(x1, y1, x2, y2) {
     global SelectedMapCtl, TempShot, TitleCaptureMap, MapCoords, RejoinActions
+    global FarmRecordMode, FarmRecordMap, GameMode
     name := (TitleCaptureMap != "") ? TitleCaptureMap : SelectedMapCtl
     TitleCaptureMap := ""
     if (name = "") {
@@ -822,6 +853,9 @@ SaveMapTitle(x1, y1, x2, y2) {
         LoadRejoinActions(name)
         RefreshMapDropdown()
         WriteBotState()
+        if (FarmRecordMode = GameMode && GameMode != "summer")
+            FarmRecordMap := name
+        UpdateRecordHotkeyState()
     }
     AddLog("Шаблон заголовка сохранён: " . out . " (" w "x" h " в " x1 "," y1 ")", "success")
     return true
@@ -1315,6 +1349,13 @@ MapChanged:
     ; Загружаем Post-Rejoin действия для выбранной карты
     if (SelectedMapCtl != "")
         LoadRejoinActions(SelectedMapCtl)
+    ; Цель записи действий следует за текущим режимом/картой.
+    if (FarmRecordMode = GameMode && GameMode != "summer") {
+        FarmRecordMap := SelectedMapCtl
+        IniWrite, %FarmRecordMap%, %SettingsFile%, FarmRecord, Map
+        PushFarmRecordState()
+    }
+    UpdateRecordHotkeyState()
     WriteBotState()
 return
 
@@ -1336,6 +1377,10 @@ return
 ; "Travelling to...". Заодно переключает панель на эту карту — так удобно
 ; проверять, что разметка и записанные действия относятся к нужной карте.
 MapDetectNow:
+    if (FarmRecordActive) {
+        AddLog("Сначала останови запись действий", "warn")
+        return
+    }
     if !WinExist(WinTitle) {
         AddLog("Проверка карты: окно Roblox не найдено", "warn")
         PushMapDetectResult("", 0)
@@ -1372,6 +1417,10 @@ return
 
 ; Снятие шаблона заголовка: всегда доступно, даже если карта ещё не распознана.
 MapCaptureTitle:
+    if (FarmRecordActive) {
+        AddLog("Сначала останови запись действий", "warn")
+        return
+    }
     if !WinExist(WinTitle) {
         AddLog("Окно Roblox не найдено — открой игру и экран «Travelling to...»", "warn")
         return
@@ -1399,6 +1448,12 @@ return
 ; Смена режима: список карт и разметка перечитываются из maps\<режим>.
 SelectGameMode(modeName) {
     global GameMode, SelectedMapCtl, PendingMapChange, MapCoords, MapList, Running
+    global FarmRecordMode, FarmRecordMap, FarmRecordActive
+    if (FarmRecordActive) {
+        AddLog("Сначала останови запись действий", "warn")
+        WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
+        return
+    }
     if (!IsValidGameMode(modeName)) {
         AddLog("Неизвестный режим: " . modeName, "warn")
         WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
@@ -1418,18 +1473,26 @@ SelectGameMode(modeName) {
     PendingMapChange := ""
     MapCoords := {}
     InvalidateTitleTemplates()
+    FarmRecordMode := GameMode
+    FarmRecordMap := ""
     SaveSettings()
     ReloadMapList()
     LoadAllMapCoords()
     RefreshMapDropdown()
     WBH_CallJS("ahkSetGameMode('" . GameMode . "')")
     WBH_CallJS("ahkUpdateMap('')")
+    PushFarmRecordSettings()
+    UpdateRecordHotkeyState()
     WriteBotState()
     AddLog("Режим: " . GameModeLabel(GameMode) . " (карт: " . MapList.Length() . ")", "success")
 }
 
 ; ===================== СНИМОК КАРТЫ =====================
 BtnCaptureMap:
+    if (FarmRecordActive) {
+        AddLog("Сначала останови запись действий", "warn")
+        return
+    }
     if !WinExist(WinTitle) {
         AddLog("Игра не найдена — сначала встрой Roblox")
         return
@@ -2175,6 +2238,9 @@ BtnPresetLoad:
     IniRead, presetMode, %PresetsIni%, %PresetName%, GameMode, __NONE__
     if (presetMode != "__NONE__" && presetMode != "ERROR" && presetMode != "" && IsValidGameMode(presetMode) && presetMode != GameMode) {
         GameMode := presetMode
+        FarmRecordMode := GameMode
+        FarmRecordMap := ""
+        UpdateRecordHotkeyState()
         SelectedMapCtl := ""
         MapCoords := {}
         InvalidateTitleTemplates()
@@ -2380,20 +2446,33 @@ return
 ; ===================== СТАРТ / СТОП ФАРМА =====================
 BtnStartStop:
 FarmHotkeyAction:
-    if (FarmMode != "autoplay") {
+    if (FarmRecordActive) {
+        AddLog("Сначала останови запись действий", "warn")
+        return
+    }
+    recordMap := (GameMode = "summer") ? "" : SelectedMapCtl
+    hasRecorded := HasFarmRecordActions(GameMode, recordMap)
+    if (FarmMode != "autoplay" && GameMode != "summer") {
         if (SelectedMapCtl = "") {
             Gosub, MapDetectNow
         }
-        if (SelectedMapCtl = "") {
+        recordMap := SelectedMapCtl
+        hasRecorded := HasFarmRecordActions(GameMode, recordMap)
+        if (SelectedMapCtl = "" && !hasRecorded) {
             AddLog("Карта не определена автоматически. Дождись экрана Travelling to... и попробуй снова", "warn")
             WBH_CallJS("ahkUpdateStatus('Map not detected', 'error')")
             return
         }
-        if (!MapCoords.HasKey(SelectedMapCtl)) {
+        if (SelectedMapCtl != "" && !MapCoords.HasKey(SelectedMapCtl) && !hasRecorded) {
             AddLog("Нельзя запустить: """ SelectedMapCtl """ не размечена", "warn")
             WBH_CallJS("ahkUpdateStatus('Map not marked', 'error')")
             return
         }
+    }
+    if (FarmMode != "autoplay" && GameMode = "summer" && !hasRecorded && !MapCoords.HasKey(SelectedMapCtl)) {
+        AddLog("Summer Event: сначала запиши действия или разметь карту", "warn")
+        WBH_CallJS("ahkUpdateStatus('Record actions first', 'error')")
+        return
     }
     if !WinExist(WinTitle) {
         AddLog("Игра не найдена", "warn")
@@ -2408,6 +2487,15 @@ FarmHotkeyAction:
         WBH_CallJS("ahkUpdateFarm(true)")
         PushFarmRunCount()
         WriteBotState()
+        PushFarmRecordState()
+        UpdateRecordHotkeyState()
+        if (hasRecorded) {
+            PlayFarmRecordedActions()
+            if (Running && BotMapPostActionsDelay > 0) {
+                AddLog("Запись действий: пауза " BotMapPostActionsDelay " сек")
+                Sleep, % BotMapPostActionsDelay * 1000
+            }
+        }
         if (FarmMode = "autoplay") {
             AutoPlayLastClickTick := 0
             AutoPlayLastStartClickTick := 0
@@ -2428,7 +2516,10 @@ FarmHotkeyAction:
             ; наблюдателем и запускается каждые 250 мс.
         } else {
             AddLog("Старт фарма: " SelectedMapCtl)
-            SetTimer, RunPlacementSequence, -100
+            if (Running && MapCoords.HasKey(SelectedMapCtl))
+                SetTimer, RunPlacementSequence, -100
+            else if (Running)
+                SetTimer, WatchNextStage, 1000
         }
     } else {
         WBH_CallJS("ahkUpdateFarm(false)")
@@ -2437,6 +2528,8 @@ FarmHotkeyAction:
         SetTimer, AutoPlayWatch, Off
         SetTimer, WatchNextStage, Off
         WriteBotState()
+        PushFarmRecordState()
+        UpdateRecordHotkeyState()
     }
 return
 
@@ -2778,10 +2871,34 @@ return
 
 ; ---- Таймер записи Post-Rejoin действий (опрос состояния мыши) ----
 RejoinRecordTimer:
-    if (!RejoinRecordActive && !BotMapRecordActive)
+    if (!RejoinRecordActive && !BotMapRecordActive && !FarmRecordActive)
         return
     MouseGetPos, mx, my
     lDown := GetKeyState("LButton", "P")
+    if (FarmRecordActive) {
+        if (lDown && !FarmRecordPending)
+            FarmRecordPending := true
+        if (!lDown && FarmRecordPending) {
+            FarmRecordPending := false
+            delayMs := 0
+            if (FarmRecordLastTime > 0)
+                delayMs := A_TickCount - FarmRecordLastTime
+            gx := mx
+            gy := my
+            if (WinExist(WinTitle)) {
+                robloxHwnd := WinExist(WinTitle)
+                VarSetCapacity(pt2, 8, 0)
+                NumPut(0, pt2, 0, "Int"), NumPut(0, pt2, 4, "Int")
+                DllCall("ClientToScreen", "ptr", robloxHwnd, "ptr", &pt2)
+                gx := mx - NumGet(pt2, 0, "Int")
+                gy := my - NumGet(pt2, 4, "Int")
+            }
+            FarmRecordActions.Push({x: gx, y: gy, delay: delayMs})
+            FarmRecordLastTime := A_TickCount
+            AddLog("Запись действий: клик " gx "," gy)
+        }
+        return
+    }
     if (BotMapRecordActive) {
         if (lDown && !BotMapRecordPending) {
             BotMapRecordPending := true
@@ -2841,14 +2958,20 @@ return
 
 ; ---- Колёсико мыши (горячие клавиши, включаются при записи) ----
 RejoinWheelUp:
-    if (!RejoinRecordActive && !BotMapRecordActive)
+    if (!RejoinRecordActive && !BotMapRecordActive && !FarmRecordActive)
         return
     delayMs := 0
-    if (BotMapRecordActive && BotMapRecordLastTime > 0)
+    if (FarmRecordActive && FarmRecordLastTime > 0)
+        delayMs := A_TickCount - FarmRecordLastTime
+    else if (BotMapRecordActive && BotMapRecordLastTime > 0)
         delayMs := A_TickCount - BotMapRecordLastTime
     else if (RejoinRecordLastTime > 0)
         delayMs := A_TickCount - RejoinRecordLastTime
-    if (BotMapRecordActive) {
+    if (FarmRecordActive) {
+        FarmRecordActions.Push({isWheel: true, delta: 120, delay: delayMs})
+        FarmRecordLastTime := A_TickCount
+        AddLog("Запись действий: колесо вверх")
+    } else if (BotMapRecordActive) {
         BotMapRecordActions.Push({isWheel: true, delta: 120, delay: delayMs})
         BotMapRecordLastTime := A_TickCount
         AddLog("Discord bot: записано колесо вверх")
@@ -2861,14 +2984,20 @@ RejoinWheelUp:
 return
 
 RejoinWheelDown:
-    if (!RejoinRecordActive && !BotMapRecordActive)
+    if (!RejoinRecordActive && !BotMapRecordActive && !FarmRecordActive)
         return
     delayMs := 0
-    if (BotMapRecordActive && BotMapRecordLastTime > 0)
+    if (FarmRecordActive && FarmRecordLastTime > 0)
+        delayMs := A_TickCount - FarmRecordLastTime
+    else if (BotMapRecordActive && BotMapRecordLastTime > 0)
         delayMs := A_TickCount - BotMapRecordLastTime
     else if (RejoinRecordLastTime > 0)
         delayMs := A_TickCount - RejoinRecordLastTime
-    if (BotMapRecordActive) {
+    if (FarmRecordActive) {
+        FarmRecordActions.Push({isWheel: true, delta: -120, delay: delayMs})
+        FarmRecordLastTime := A_TickCount
+        AddLog("Запись действий: колесо вниз")
+    } else if (BotMapRecordActive) {
         BotMapRecordActions.Push({isWheel: true, delta: -120, delay: delayMs})
         BotMapRecordLastTime := A_TickCount
         AddLog("Discord bot: записано колесо вниз")
@@ -2977,10 +3106,28 @@ ToggleRejoinRecord:
     }
 return
 
+; ---- Доступность клавиши записи: только когда выбраны режим и (если нужно) карта ----
+UpdateRecordHotkeyState() {
+    global MapChangeRecordHotkey, AppliedMapChangeRecordHotkey, RecordSettingsOpen, ModalHwnd
+    if (AppliedMapChangeRecordHotkey = "")
+        return
+    ; Клавиша доступна после выбора цели.
+    ; Пока открыто другое модальное окно, запись не запускаем.
+    otherModal := ModalHwnd && DllCall("IsWindow", "ptr", ModalHwnd) && !RecordSettingsOpen
+    if (!otherModal && FarmRecordReady())
+        Hotkey, %AppliedMapChangeRecordHotkey%, MapChangeRecordHotkeyAction, On
+    else
+        Hotkey, %AppliedMapChangeRecordHotkey%, MapChangeRecordHotkeyAction, Off
+}
+
 ; ---- Горячая клавиша — старт/стоп записи Post-Rejoin действий ----
 RejoinRecordHotkeyAction:
 RejoinF1:
-    global RejoinRecordActive, SelectedMapCtl
+    global RejoinRecordActive, SelectedMapCtl, FarmRecordActive
+    if (FarmRecordActive) {
+        AddLog("Сначала останови запись действий", "warn")
+        return
+    }
     if (RejoinRecordActive) {
         GoSub, ToggleRejoinRecord
     } else {
@@ -3006,24 +3153,16 @@ return
 
 MapChangeRecordHotkeyAction:
 MapChangeF2:
-    global BotMapRecordActive, RejoinRecordActive, SelectedMapCtl
-    if (BotMapRecordActive) {
-        StopBotMapRecord()
-        return
-    }
-    if (RejoinRecordActive) {
-        AddLog("MapRecord: сначала остановите запись Post-Rejoin!", "warn")
-        return
-    }
-    if (SelectedMapCtl = "") {
-        AddLog("MapRecord: сначала выбери карту в сайдбаре!", "warn")
-        return
-    }
-    if (!WinExist(WinTitle)) {
-        AddLog("MapRecord: окно Roblox не найдено!", "warn")
-        return
-    }
-    StartBotMapRecord(SelectedMapCtl)
+    ToggleFarmRecord()
+return
+
+; ---- Клавиши и их удержания во время записи действий фарма ----
+FarmRecordKeyDown:
+    FarmRecordKeyHandler(false)
+return
+
+FarmRecordKeyUp:
+    FarmRecordKeyHandler(true)
 return
 
 ; ---- Тестовое воспроизведение Post-Rejoin действий ----
@@ -3326,10 +3465,19 @@ RestartFarmLoop:
     if (!Running)
         return
     WBH_CallJS("ahkUpdateStatus('Restarting stage...', 'running')")
-    AddLog("Перезапуск этапа: жду загрузку, затем расстановка заново")
+    nextStep := MapCoords.HasKey(SelectedMapCtl) ? "расстановка заново" : "повтор записанных действий"
+    AddLog("Перезапуск этапа: жду загрузку, затем " . nextStep)
     Sleep, 4000
-    if (Running)
-        SetTimer, RunPlacementSequence, -100
+    if (Running) {
+        if (MapCoords.HasKey(SelectedMapCtl)) {
+            SetTimer, RunPlacementSequence, -100
+        } else {
+            ; Без разметки карты повторяем записанные действия.
+            PlayFarmRecordedActions()
+            if (Running)
+                SetTimer, WatchNextStage, 1000
+        }
+    }
 return
 
 ; ---- Переподключение к VIP/приватному серверу через deeplink ----
@@ -4161,6 +4309,7 @@ return
 
 ProcessBotCommand(requestId, action, argument) {
     global BotScreenshotFile, PendingMapChange, Running, MapCoords, SelectedMapCtl, LastCaptureX, LastCaptureY, LastCaptureW, LastCaptureH, WinTitle, GameAreaW, GameAreaH
+    global FarmRecordActive, FarmRecordMode, FarmRecordMap, GameMode
     if (action = "screenshot") {
         ; Захват выполняет Python-бот: он умеет поднять Roblox, получить
         ; изображение через mss и использовать desktop fallback. AHK только
@@ -4182,6 +4331,10 @@ ProcessBotCommand(requestId, action, argument) {
         return
     }
     if (action = "switch-map") {
+        if (FarmRecordActive) {
+            BotWriteResponse(requestId, false, "Сначала останови запись действий")
+            return
+        }
         if (argument = "") {
             BotWriteResponse(requestId, false, "Имя карты не указано")
             return
@@ -4196,8 +4349,11 @@ ProcessBotCommand(requestId, action, argument) {
             BotWriteResponse(requestId, true, "Карта " argument " будет запущена после текущего раунда")
         } else {
             SelectedMapCtl := argument
+            if (FarmRecordMode = GameMode && GameMode != "summer")
+                FarmRecordMap := argument
             LoadRejoinActions(argument)
             RefreshMapDropdown()
+            UpdateRecordHotkeyState()
             AddLog("Discord bot: выбрана карта " argument)
             BotWriteResponse(requestId, true, "Карта переключена: " argument)
         }
@@ -4333,7 +4489,12 @@ PushBotMapRecordState() {
 }
 
 StartBotMapRecord(mapName, requestId := "") {
-    global BotMapRecordActive, BotMapRecordMap, BotMapRecordActions, BotMapRecordLastTime, BotMapRecordPending, RejoinRecordActive
+    global BotMapRecordActive, BotMapRecordMap, BotMapRecordActions, BotMapRecordLastTime, BotMapRecordPending, RejoinRecordActive, FarmRecordActive
+    if (FarmRecordActive) {
+        if (requestId != "")
+            BotWriteResponse(requestId, false, "Сначала останови запись действий")
+        return
+    }
     if (mapName = "") {
         if (requestId != "")
             BotWriteResponse(requestId, false, "Имя карты не указано")
@@ -4382,6 +4543,439 @@ StopBotMapRecord(requestId := "") {
         BotWriteResponse(requestId, true, "Запись сохранена: " count " действий")
 }
 
+; ===================== ЗАПИСЬ ДЕЙСТВИЙ ФАРМА =====================
+; Действия хранятся отдельно от действий Discord-бота:
+;   actions\farm\<режим>\<карта>.ini  — для режимов с выбором карты;
+;   actions\farm\<режим>\_mode_.ini   — для Summer Event без карты.
+
+FarmRecordLower(text) {
+    StringLower, lower, text
+    return lower
+}
+
+BuildFarmRecordKeyNames() {
+    keys := []
+    Loop, 26
+        keys.Push(Chr(96 + A_Index))
+    Loop, 10
+        keys.Push(Chr(47 + A_Index))
+    keys.Push("Space")
+    keys.Push("Enter")
+    keys.Push("Tab")
+    keys.Push("Esc")
+    keys.Push("Backspace")
+    keys.Push("Delete")
+    keys.Push("Insert")
+    keys.Push("Home")
+    keys.Push("End")
+    keys.Push("PgUp")
+    keys.Push("PgDn")
+    keys.Push("Up")
+    keys.Push("Down")
+    keys.Push("Left")
+    keys.Push("Right")
+    keys.Push("LShift")
+    keys.Push("RShift")
+    keys.Push("LCtrl")
+    keys.Push("RCtrl")
+    keys.Push("LAlt")
+    keys.Push("RAlt")
+    keys.Push("CapsLock")
+    keys.Push(";")
+    keys.Push(",")
+    keys.Push(".")
+    keys.Push("/")
+    keys.Push("-")
+    keys.Push("=")
+    keys.Push(Chr(92))
+    ; Символы, которые AHK не принимает как одиночные имена клавиш.
+    keys.Push("vkDE")
+    keys.Push("vkDB")
+    keys.Push("vkDD")
+    keys.Push("vkC0")
+    Loop, 12
+        keys.Push("F" . A_Index)
+    Loop, 10
+        keys.Push("Numpad" . (A_Index - 1))
+    keys.Push("NumpadDot")
+    keys.Push("NumpadAdd")
+    keys.Push("NumpadSub")
+    keys.Push("NumpadMult")
+    keys.Push("NumpadDiv")
+    keys.Push("NumpadEnter")
+    return keys
+}
+
+FarmRecordKeyNameFromHotkey(hotkey) {
+    hotkey := RegExReplace(hotkey, "\s+Up$", "")
+    return RegExReplace(hotkey, "^[~*$#!^+]+", "")
+}
+
+FarmRecordKeyHandler(isUp) {
+    global FarmRecordActive
+    if (!FarmRecordActive)
+        return
+    keyName := FarmRecordKeyNameFromHotkey(A_ThisHotkey)
+    if (keyName = "")
+        return
+    RecordFarmKey(keyName, isUp)
+}
+
+RecordFarmKey(keyName, isUp) {
+    global FarmRecordActive, FarmRecordActions, FarmRecordLastTime, FarmKeyDownMap
+    if (!FarmRecordActive)
+        return
+    keyId := FarmRecordLower(keyName)
+    if (isUp) {
+        if (!FarmKeyDownMap.HasKey(keyId))
+            return
+        FarmKeyDownMap.Delete(keyId)
+    } else {
+        ; Автоповтор удерживаемой клавиши не должен добавлять новые действия.
+        if (FarmKeyDownMap.HasKey(keyId))
+            return
+        FarmKeyDownMap[keyId] := true
+    }
+    delayMs := 0
+    if (FarmRecordLastTime > 0)
+        delayMs := A_TickCount - FarmRecordLastTime
+    sc := 0
+    vk := 0
+    try sc := GetKeySC(keyName)
+    try vk := GetKeyVK(keyName)
+    FarmRecordActions.Push({isKey: true, key: keyName, sc: sc, vk: vk, down: !isUp, delay: delayMs})
+    FarmRecordLastTime := A_TickCount
+}
+
+EnableFarmRecordKeys() {
+    global FarmRecordKeyHotkeys, AppliedFarmHotkey, AppliedRejoinRecordHotkey
+    global AppliedMapChangeRecordHotkey, AppliedMapDetectHotkey, AppliedCardVoteHotkey
+    excluded := {}
+    appHotkeys := [AppliedFarmHotkey, AppliedRejoinRecordHotkey, AppliedMapChangeRecordHotkey, AppliedMapDetectHotkey, AppliedCardVoteHotkey]
+    for _, appHk in appHotkeys {
+        if (appHk = "")
+            continue
+        base := RegExReplace(appHk, "^[~*$#!^+]+", "")
+        base := RegExReplace(base, "\s+Up$", "")
+        if (base != "")
+            excluded[FarmRecordLower(base)] := true
+    }
+    FarmRecordKeyHotkeys := []
+    for _, keyName in BuildFarmRecordKeyNames() {
+        if (excluded.HasKey(FarmRecordLower(keyName)))
+            continue
+        hk := "~*" . keyName
+        downOn := false
+        try {
+            Hotkey, %hk%, FarmRecordKeyDown, On
+            downOn := true
+            Hotkey, %hk% Up, FarmRecordKeyUp, On
+            FarmRecordKeyHotkeys.Push(hk)
+        } catch e {
+            if (downOn) {
+                try Hotkey, %hk%, FarmRecordKeyDown, Off
+                try Hotkey, %hk% Up, FarmRecordKeyUp, Off
+            }
+        }
+    }
+}
+
+DisableFarmRecordKeys() {
+    global FarmRecordKeyHotkeys
+    for _, hk in FarmRecordKeyHotkeys {
+        try Hotkey, %hk%, FarmRecordKeyDown, Off
+        try Hotkey, %hk% Up, FarmRecordKeyUp, Off
+    }
+    FarmRecordKeyHotkeys := []
+}
+
+FarmPlaybackKeyRef(a) {
+    if (a.sc > 0)
+        return "sc" . Format("{:X}", a.sc)
+    if (a.vk > 0)
+        return "vk" . Format("{:X}", a.vk)
+    if (a.key != "")
+        return a.key
+    return ""
+}
+
+ReleasePlaybackKeys(heldKeys) {
+    for keyRef in heldKeys
+        SendInput, % "{Blind}{" . keyRef . " up}"
+}
+
+FarmRecordReady() {
+    global FarmRecordMode, FarmRecordMap, GameMode, Running
+    if (Running)
+        return false
+    if (FarmRecordMode = "" || !IsValidGameMode(FarmRecordMode))
+        return false
+    if (FarmRecordMode != GameMode)
+        return false
+    if (FarmRecordMode = "summer")
+        return true
+    return FarmRecordMap != ""
+}
+
+FarmRecordActionsFile(mode, mapName) {
+    global BotActionsDir
+    if (mode = "")
+        mode := "summer"
+    dir := BotActionsDir . "\farm\" . mode
+    if !InStr(FileExist(dir), "D")
+        FileCreateDir, %dir%
+    key := (mapName = "") ? "_mode_" : MapFileBase(mapName)
+    return dir . "\" . key . ".ini"
+}
+
+CountFarmRecordActions(mode, mapName) {
+    f := FarmRecordActionsFile(mode, mapName)
+    if !FileExist(f)
+        return 0
+    IniRead, count, %f%, Actions, Count, 0
+    return count + 0
+}
+
+HasFarmRecordActions(mode, mapName) {
+    return CountFarmRecordActions(mode, mapName) > 0
+}
+
+LoadFarmRecordActions(mode, mapName) {
+    global FarmRecordActions
+    FarmRecordActions := []
+    f := FarmRecordActionsFile(mode, mapName)
+    if !FileExist(f)
+        return
+    IniRead, count, %f%, Actions, Count, 0
+    Loop, %count% {
+        IniRead, raw, %f%, Actions, %A_Index%, -
+        if (raw = "-")
+            continue
+        if (InStr(raw, "key,") = 1) {
+            rest := SubStr(raw, 5)
+            StringSplit, kp, rest, |
+            if (kp0 >= 5)
+                FarmRecordActions.Push({isKey: true, key: kp1, sc: (kp2 + 0), vk: (kp3 + 0), down: (kp4 = "1"), delay: (kp5 + 0)})
+        } else if (InStr(raw, "wheel,") = 1) {
+            rest := SubStr(raw, 7)
+            StringSplit, wp, rest, `,
+            if (wp0 >= 2)
+                FarmRecordActions.Push({isWheel: true, delta: wp1, delay: wp2})
+        } else {
+            StringSplit, ap, raw, `,
+            if (ap0 >= 3)
+                FarmRecordActions.Push({x: ap1, y: ap2, delay: ap3})
+        }
+    }
+}
+
+SaveFarmRecordActions(mode, mapName) {
+    global FarmRecordActions
+    f := FarmRecordActionsFile(mode, mapName)
+    FileDelete, %f%
+    count := FarmRecordActions.Length()
+    IniWrite, %count%, %f%, Actions, Count
+    Loop, %count% {
+        a := FarmRecordActions[A_Index]
+        if (a.isKey)
+            IniWrite, % "key," . a.key . "|" . a.sc . "|" . a.vk . "|" . (a.down ? 1 : 0) . "|" . a.delay, %f%, Actions, %A_Index%
+        else if (a.isWheel)
+            IniWrite, % "wheel," . a.delta . "," . a.delay, %f%, Actions, %A_Index%
+        else
+            IniWrite, % a.x . "," . a.y . "," . a.delay, %f%, Actions, %A_Index%
+    }
+}
+
+ClearFarmRecordActions() {
+    global FarmRecordMode, FarmRecordMap, FarmRecordActive
+    if (FarmRecordActive)
+        return
+    if (FarmRecordMode = "")
+        return
+    f := FarmRecordActionsFile(FarmRecordMode, FarmRecordMap)
+    if FileExist(f)
+        FileDelete, %f%
+    AddLog("Запись действий очищена: " FarmRecordLabel(FarmRecordMode, FarmRecordMap))
+    PushFarmRecordState()
+}
+
+FarmRecordLabel(mode, mapName) {
+    global GameModeLabels
+    label := GameModeLabels.HasKey(mode) ? GameModeLabels[mode] : mode
+    if (mode != "summer" && mapName != "")
+        label .= " / " . mapName
+    return label
+}
+
+PushFarmRecordOptions(mode) {
+    global MapList
+    names := []
+    LoadMapCatalog(mode, names)
+    joined := ""
+    for _, name in names {
+        name := Trim(name)
+        if (name = "")
+            continue
+        if (joined != "")
+            joined .= "|"
+        joined .= name
+    }
+    ModalCallJS("ahkSetRecordMapOptions('" . JsEscape(joined) . "')")
+}
+
+PushFarmRecordState() {
+    global FarmRecordMode, FarmRecordMap, MapChangeRecordHotkey, FarmRecordActive, FarmRecordActions, RecordSettingsOpen, WB_Modal, ModalHwnd
+    if (!RecordSettingsOpen || !WB_Modal || !ModalHwnd || !DllCall("IsWindow", "ptr", ModalHwnd) || WB_Modal.ReadyState != 4)
+        return
+    ready := FarmRecordReady()
+    if (FarmRecordActive)
+        count := FarmRecordActions.Length()
+    else
+        count := CountFarmRecordActions(FarmRecordMode, FarmRecordMap)
+    ModalCallJS("ahkRecordState('" . JsEscape(FarmRecordMode) . "','" . JsEscape(FarmRecordMap) . "'," . (ready ? "true" : "false") . ",'" . JsEscape(MapChangeRecordHotkey) . "'," . count . "," . (FarmRecordActive ? "true" : "false") . ")")
+    UpdateRecordHotkeyState()
+}
+
+PushFarmRecordSettings() {
+    global FarmRecordMode, FarmRecordMap, GameMode, SelectedMapCtl, RecordSettingsOpen
+    if (!RecordSettingsOpen)
+        return
+    FarmRecordMode := GameMode
+    FarmRecordMap := (GameMode = "summer") ? "" : SelectedMapCtl
+    PushFarmRecordOptions(FarmRecordMode)
+    PushFarmRecordState()
+}
+
+SetFarmRecordTarget(mode, mapName) {
+    global FarmRecordMode, FarmRecordMap, GameMode, SelectedMapCtl, Running, SettingsFile, FarmRecordActive
+    if (!IsValidGameMode(mode))
+        return
+    if (FarmRecordActive) {
+        AddLog("Запись действий: сначала останови запись", "warn")
+        PushFarmRecordOptions(FarmRecordMode)
+        PushFarmRecordState()
+        UpdateRecordHotkeyState()
+        return
+    }
+    if (Running) {
+        AddLog("Запись действий: сначала останови фарм", "warn")
+        PushFarmRecordOptions(FarmRecordMode)
+        PushFarmRecordState()
+        return
+    }
+    mapName := Trim(mapName)
+    if (mode = "summer")
+        mapName := ""
+    ; Проверяем карту по каталогу выбранного режима.
+    if (mode != "summer" && mapName != "") {
+        names := []
+        LoadMapCatalog(mode, names)
+        found := false
+        for _, name in names {
+            if (name = mapName) {
+                found := true
+                break
+            }
+        }
+        if (!found)
+            mapName := ""
+    }
+    if (mode != GameMode)
+        SelectGameMode(mode)
+    FarmRecordMode := mode
+    FarmRecordMap := mapName
+    if (mode = "summer" || mapName = "") {
+        if (SelectedMapCtl != "") {
+            SelectedMapCtl := ""
+            Gosub, MapChanged
+            WBH_CallJS("ahkUpdateMap('')")
+        }
+    } else if (SelectedMapCtl != mapName) {
+        SelectedMapCtl := mapName
+        Gosub, MapChanged
+        WBH_CallJS("ahkUpdateMap('" . JsEscape(SelectedMapCtl) . "')")
+    }
+    IniWrite, %FarmRecordMode%, %SettingsFile%, FarmRecord, Mode
+    IniWrite, %FarmRecordMap%, %SettingsFile%, FarmRecord, Map
+    PushFarmRecordOptions(FarmRecordMode)
+    PushFarmRecordState()
+}
+
+ToggleFarmRecord() {
+    global FarmRecordActive, FarmRecordActions, FarmRecordLastTime, FarmRecordPending, FarmRecordMode, FarmRecordMap, Running, RejoinRecordActive, BotMapRecordActive, RecordSettingsOpen, ModalHwnd, WinTitle, MapChangeRecordHotkey, FarmKeyDownMap
+    if (FarmRecordActive) {
+        FarmRecordActive := false
+        FarmRecordPending := false
+        SetTimer, RejoinRecordTimer, Off
+        Hotkey, ~WheelUp, Off
+        Hotkey, ~WheelDown, Off
+        DisableFarmRecordKeys()
+        FarmKeyDownMap := {}
+        SaveFarmRecordActions(FarmRecordMode, FarmRecordMap)
+        count := FarmRecordActions.Length()
+        AddLog("Запись действий остановлена: " count " действий для " FarmRecordLabel(FarmRecordMode, FarmRecordMap))
+        if (RecordSettingsOpen && ModalHwnd && DllCall("IsWindow", "ptr", ModalHwnd)) {
+            DllCall("ShowWindow", "ptr", ModalHwnd, "int", 5)
+            WinActivate, ahk_id %ModalHwnd%
+        }
+        PushFarmRecordState()
+        return
+    }
+    if (Running) {
+        AddLog("Запись действий: сначала останови фарм", "warn")
+        return
+    }
+    if (!FarmRecordReady()) {
+        AddLog("Запись действий: выбери режим и карту в настройках", "warn")
+        return
+    }
+    if (FarmRecordMode = "summer")
+        FarmRecordMap := ""
+    if (RejoinRecordActive || BotMapRecordActive) {
+        AddLog("Запись действий: уже идёт другая запись", "warn")
+        return
+    }
+    if (ModalHwnd && DllCall("IsWindow", "ptr", ModalHwnd) && !RecordSettingsOpen) {
+        AddLog("Запись действий: закрой открытое окно", "warn")
+        return
+    }
+    if (!WinExist(WinTitle)) {
+        AddLog("Запись действий: окно Roblox не найдено", "warn")
+        return
+    }
+    FarmRecordActions := []
+    FarmRecordLastTime := A_TickCount
+    FarmRecordPending := false
+    FarmKeyDownMap := {}
+    FarmRecordActive := true
+    EnableFarmRecordKeys()
+    Hotkey, ~WheelUp, On
+    Hotkey, ~WheelDown, On
+    SetTimer, RejoinRecordTimer, 50
+    ; Прячем настройки, чтобы не заслонять игру во время записи.
+    if (RecordSettingsOpen && ModalHwnd && DllCall("IsWindow", "ptr", ModalHwnd))
+        DllCall("ShowWindow", "ptr", ModalHwnd, "int", 0)
+    if (WinExist(WinTitle)) {
+        WinActivate, %WinTitle%
+        WinWaitActive, %WinTitle%,, 2
+    }
+    AddLog("Запись действий начата: " FarmRecordLabel(FarmRecordMode, FarmRecordMap) " (" MapChangeRecordHotkey " = стоп)")
+    PushFarmRecordState()
+    UpdateRecordHotkeyState()
+}
+
+PlayFarmRecordedActions() {
+    global FarmRecordActions, FarmRecordMode, FarmRecordMap, GameMode, SelectedMapCtl, Running
+    mode := GameMode
+    mapName := (mode = "summer") ? "" : SelectedMapCtl
+    if (!HasFarmRecordActions(mode, mapName))
+        return false
+    LoadFarmRecordActions(mode, mapName)
+    count := FarmRecordActions.Length()
+    AddLog("Запись действий: выполняю " count " действий для " FarmRecordLabel(mode, mapName))
+    return PlayActionList(FarmRecordActions, "Запись действий")
+}
+
 PlayBotMapActions(mapName) {
     global BotMapActions
     LoadBotMapActions(mapName)
@@ -4401,14 +4995,31 @@ PlayActionList(actions, source := "Actions") {
         WinActivate, %WinTitle%
         WinWaitActive, %WinTitle%,, 2
     }
+    heldKeys := {}
     for i, a in actions {
-        if (!Running)
+        if (!Running) {
+            ReleasePlaybackKeys(heldKeys)
             return false
+        }
         if (a.delay > 0)
             Sleep, % a.delay
-        if (!Running)
+        if (!Running) {
+            ReleasePlaybackKeys(heldKeys)
             return false
-        if (a.isWheel) {
+        }
+        if (a.isKey) {
+            keyRef := FarmPlaybackKeyRef(a)
+            if (keyRef != "") {
+                if (a.down) {
+                    SendInput, % "{Blind}{" . keyRef . " down}"
+                    heldKeys[keyRef] := true
+                } else {
+                    SendInput, % "{Blind}{" . keyRef . " up}"
+                    if (heldKeys.HasKey(keyRef))
+                        heldKeys.Delete(keyRef)
+                }
+            }
+        } else if (a.isWheel) {
             notches := Abs(a.delta) // 120
             Loop, %notches% {
                 if (a.delta > 0)
@@ -4422,20 +5033,25 @@ PlayActionList(actions, source := "Actions") {
             SmoothClick(TS_X, TS_Y, 80)
         }
     }
+    ReleasePlaybackKeys(heldKeys)
     AddLog(source ": действия завершены")
     return true
 }
 
 HandlePendingMapChange(resultName) {
     global PendingMapChange, SelectedMapCtl, Running, MapCoords, BotMapPostActionsDelay
+    global FarmRecordMode, FarmRecordMap, GameMode
     target := PendingMapChange
     PendingMapChange := ""
     if (target = "" || !MapCoords.HasKey(target))
         return false
     SetTimer, WatchNextStage, Off
     SelectedMapCtl := target
+    if (FarmRecordMode = GameMode && GameMode != "summer")
+        FarmRecordMap := target
     LoadRejoinActions(target)
     RefreshMapDropdown()
+    UpdateRecordHotkeyState()
     WBH_CallJS("ahkUpdateStatus('Changing map...', 'running')")
     AddLog("Discord bot: " resultName " — переключаюсь на карту " target)
     actionsPlayed := PlayBotMapActions(target)
@@ -4531,6 +5147,14 @@ ProcessJSCmd(cmd) {
         return
     }
     if (action = "select-map") {
+        if (FarmRecordActive) {
+            AddLog("Сначала останови запись действий", "warn")
+            if (SelectedMapCtl != "")
+                WBH_CallJS("ahkUpdateMap('" . StrReplace(SelectedMapCtl, "'", "\\'") . "')")
+            else
+                WBH_CallJS("ahkUpdateMap('')")
+            return
+        }
         if (Running) {
             ; Смена карты на ходу: расстановка продолжила бы работать со слотами
             ; прежней карты, поэтому отказываем и возвращаем выбор в панели.
@@ -4764,7 +5388,10 @@ UpdateMapListHTML() {
 ; title: заголовок окна
 ; w, h: размеры окна
 OpenModalWindow(name, title, w, h) {
-    global htmlURL, WB_Modal, ModalHwnd, MainGuiHwnd, AppLanguage
+    global htmlURL, WB_Modal, ModalHwnd, MainGuiHwnd, AppLanguage, RecordSettingsOpen, FarmRecordActive
+    if (FarmRecordActive)
+        ToggleFarmRecord()
+    RecordSettingsOpen := (name = "settings")
     ; Пока открыты настройки, назначаемые комбинации не должны запускать макрос.
     EnableConfiguredHotkeys()
     if (name = "settings")
@@ -4796,6 +5423,7 @@ OpenModalWindow(name, title, w, h) {
     ModalCallJS("ahkSetLanguage('" . AppLanguage . "')")
     ; Пушим данные в модалку (текущие настройки / список пресетов / координаты)
     PushModalData(name)
+    UpdateRecordHotkeyState()
     
     ; Центрируем окно на экране
     SysGet, Mon, MonitorWorkArea
@@ -4887,13 +5515,19 @@ PollModalClose:
     }
     
     ; Возвращаем хоткеи для любой команды, кроме начала захвата клавиши.
-    if (action != "hotkey-capture-start")
+    if (action != "hotkey-capture-start") {
         EnableConfiguredHotkeys()
+        UpdateRecordHotkeyState()
+    }
 
     if (cmd = "close-modal") {
+        if (FarmRecordActive)
+            ToggleFarmRecord()
+        RecordSettingsOpen := false
         SetTimer, PollModalClose, Off
         Gui, Modal:Destroy
         ModalHwnd := 0
+        UpdateRecordHotkeyState()
     }
     else if (cmd = "minimize-modal") {
         Gui, Modal:Minimize
@@ -5093,9 +5727,23 @@ PollModalClose:
         ; Старт/стоп записи Post-Rejoin действий
         GoSub, ToggleRejoinRecord
     }
+    else if (action = "record-target") {
+        slashPos2 := InStr(arg, "/")
+        if (slashPos2) {
+            targetMode := SubStr(arg, 1, slashPos2 - 1)
+            targetMap := UriDecode(SubStr(arg, slashPos2 + 1))
+            SetFarmRecordTarget(targetMode, targetMap)
+        }
+    }
+    else if (action = "record-farm-actions") {
+        ToggleFarmRecord()
+    }
+    else if (action = "clear-farm-actions") {
+        ClearFarmRecordActions()
+    }
     else if (action = "record-map-entry") {
-        ; Старт/стоп записи входа на выбранную карту
-        GoSub, MapChangeRecordHotkeyAction
+        ; Совместимость со старым идентификатором кнопки.
+        ToggleFarmRecord()
     }
     else if (action = "test-rejoin") {
         ; Тестовое воспроизведение записанных действий
@@ -5252,12 +5900,16 @@ return
 
 ; ---- Закрытие модалки через ✕ (крестик окна) ----
 ModalGuiClose:
+    if (FarmRecordActive)
+        ToggleFarmRecord()
+    RecordSettingsOpen := false
     SetTimer, PollModalClose, Off
     SetTimer, PollHotkeyCapture, Off
     Gui, HotkeyCapture:Destroy
     EnableConfiguredHotkeys()
     Gui, Modal:Destroy
     ModalHwnd := 0
+    UpdateRecordHotkeyState()
 return
 
 ; ---- Вызов JS в модальном окне ----
@@ -5300,7 +5952,6 @@ PushModalData(name) {
             . RejoinPostActionsDelay . "," . (MouseSpeedEnabled ? 1 : 0) . "," . ZoomScrolls . "," . (ZoomEnabled ? 1 : 0) . "," . (TopCameraEnabled ? 1 : 0) . ",'" . AppLanguage . "','" . farmHotkeyJS . "','" . rejoinHotkeyJS . "',"
             . (BotEnabled ? 1 : 0) . "," . (BotAutoStart ? 1 : 0) . ",'" . botTokenJS . "','" . botGuildJS . "','" . botAllowedJS . "','" . mapChangeHotkeyJS . "'," . BotMapPostActionsDelay . ",'" . JsEscape(FarmMode) . "','" . mapDetectHotkeyJS . "')")
         ModalCallJS("ahkSetFarmMode('" . JsEscape(FarmMode) . "')")
-        AddLog("Settings пушнуты в модалку (Rejoin: " (RejoinEnabled ? "on" : "off") ", link len=" StrLen(RejoinShareLink) ")")
         ; Также пушим количество записанных Post-Rejoin действий
         count := RejoinActions.Length()
         ModalCallJS("ahkRejoinActionCount(" count ")")
@@ -5310,6 +5961,7 @@ PushModalData(name) {
         ; Карточка «Распознавание карты»: активный режим и последний результат
         ModalCallJS("ahkSetGameMode('" . GameMode . "')")
         ModalCallJS("ahkMapDetectResult('" . JsEscape(LastDetectedMap) . "'," . LastDetectScore . ")")
+        PushFarmRecordSettings()
     }
     else if (name = "presets") {
         ; Собираем список пресетов из presets.ini

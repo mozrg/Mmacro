@@ -124,6 +124,7 @@ EnableConfiguredHotkeys() {
         Hotkey, %AppliedMapDetectHotkey%, MapDetectHotkeyAction, On
     if (AppliedCardVoteHotkey != "")
         Hotkey, %AppliedCardVoteHotkey%, CardVoteHotkeyAction, On
+    UpdateRecordHotkeyState()
 }
 
 ApplyConfiguredHotkeys() {
@@ -182,4 +183,5 @@ ApplyConfiguredHotkeys() {
         Hotkey, %CardVoteHotkey%, CardVoteHotkeyAction, On
     }
     AppliedCardVoteHotkey := CardVoteHotkey
+    UpdateRecordHotkeyState()
 }
