@@ -84,6 +84,21 @@ if FileExist(LogoIconFile) {
     Menu, Tray, Tip, Mmacro
 }
 
+; Явно ставим иконку главному окну (панель задач / Alt+Tab), а не только трею.
+; Иконка грузится из mmacro.ico в двух размерах; дескрипторы остаются живы,
+; пока существует окно.
+SetMainWindowIcon(hwnd) {
+    global LogoIconFile
+    if (!hwnd || !FileExist(LogoIconFile))
+        return
+    hBig := DllCall("LoadImage", "ptr", 0, "str", LogoIconFile, "uint", 1, "int", 32, "int", 32, "uint", 0x10, "ptr")
+    hSmall := DllCall("LoadImage", "ptr", 0, "str", LogoIconFile, "uint", 1, "int", 16, "int", 16, "uint", 0x10, "ptr")
+    if (hBig)
+        SendMessage, 0x80, 1, %hBig%, , ahk_id %hwnd%
+    if (hSmall)
+        SendMessage, 0x80, 0, %hSmall%, , ahk_id %hwnd%
+}
+
 ; ---- Discord bot integration ----
 BotDir := A_ScriptDir . "\..\bot"
 BotRuntimeDir := BotDir . "\runtime"
@@ -283,7 +298,7 @@ UpdateCardVoteTimer()
 
 ; ===================== GUI (тёмная тема + HTML на всё окно) =====================
 Gui, +HwndMainGuiHwnd -Caption
-Gui, Color, 0x121212
+Gui, Color, 0x0B1017
 
 ; ---- 1. HTML-панель на ВСЁ окно (первой — будет снизу) ----
 ; Включаем IE11 Edge Mode
@@ -358,6 +373,7 @@ if (StartY < 0)
     StartY := 100
 
 Gui, Show, x%StartX% y%StartY% w%SidebarTotalW% h%SidebarTotalH%, Mmacro Control
+SetMainWindowIcon(MainGuiHwnd)
 
 ; Таймер опроса JS-команд
 SetTimer, PollJSCmd, 20
@@ -862,8 +878,9 @@ LoadAllMapCoords() {
         LoadMapCoordsOne(m)
 }
 
-; Сбор списка карт активного режима: сначала единый каталог названий,
-; затем файлы-карты для обратной совместимости.
+; Сбор списка карт активного режима строго из общего каталога.
+; Файлы снимков/разметки не добавляют новые имена: иначе в списке
+; появляются случайные файлы, которых нет в map_catalog.txt.
 ReloadMapList() {
     global MapList, GameMode
     MapList := []
@@ -871,8 +888,6 @@ ReloadMapList() {
     if !InStr(FileExist(dir), "D")
         FileCreateDir, %dir%
 
-    ; The catalog supplies selectable names before their title or snapshot exists.
-    ; Existing assets are also appended for backwards compatibility.
     seen := {}
     if LoadMapCatalog(GameMode, catalogNames) {
         for _, name in catalogNames {
@@ -883,25 +898,8 @@ ReloadMapList() {
             seen[key] := true
             MapList.Push(name)
         }
-    } else if (GameMode = "infinite")
+    } else {
         AddLog("Каталог карт не найден: " . MapsDir . "\map_catalog.txt", "warn")
-    if !InStr(FileExist(dir), "D")
-        return
-    for _, pattern in ["\*_title.bmp", "\*_title.png", "\*.bmp", "\*.png"] {
-        Loop, Files, %dir%%pattern%
-        {
-            name := A_LoopFileName
-            StringGetPos, dotPos, name, .
-            if (dotPos >= 0)
-                name := SubStr(name, 1, dotPos)
-            name := RegExReplace(name, "i)_title$", "")
-            name := Trim(name)
-            StringLower, key, name
-            if (name = "" || seen.HasKey(key))
-                continue
-            seen[key] := true
-            MapList.Push(name)
-        }
     }
 }
 
@@ -1170,6 +1168,7 @@ BtnEmbed:
     GuiControl, Move, WB, x0 y0 w%SidebarW% h%GameAreaH%
     sidebarX := dockRX + GameAreaW
     Gui, Show, x%sidebarX% y%dockRY% w%SidebarW% h%GameAreaH%, Mmacro Control
+SetMainWindowIcon(MainGuiHwnd)
 
     ; Убираем рамку/заголовок, но не добавляем WS_CHILD и не удаляем WS_POPUP.
     dockStyle := OrigStyle
@@ -1225,6 +1224,7 @@ UnembedGameWindow() {
     sidebarX := hostX
     GuiControl, Move, WB, x0 y0 w%SidebarW% h%GameAreaH%
     Gui, Show, x%sidebarX% y%hostY% w%SidebarW% h%GameAreaH%, Mmacro Control
+SetMainWindowIcon(MainGuiHwnd)
     Gui, Restore
     WinActivate, ahk_id %MainGuiHwnd%
     if (OrigMainStyle)
@@ -2193,6 +2193,17 @@ BtnPresetLoad:
         IniRead, mapName, %PresetsIni%, %PresetName%, %nameKey%, __NONE__
         if (mapName = "" || mapName = "ERROR" || mapName = "__NONE__")
             continue
+        ; Старые пресеты могли хранить карты, которых уже нет в map_catalog.txt.
+        ; Не применяем их и не создаём для них файлы разметки.
+        knownMap := false
+        for _, knownName in MapList {
+            if (knownName = mapName) {
+                knownMap := true
+                break
+            }
+        }
+        if (!knownMap)
+            continue
         cntKey := "Map_" idx "_SlotCount"
         IniRead, slotCount, %PresetsIni%, %PresetName%, %cntKey%, 0
         slotList := []
@@ -2237,7 +2248,7 @@ AutoUpgradeToggle:
 return
 
 BtnOpenAutoUpgradeSettings:
-    OpenModalWindow("upgrade", "Auto Upgrade", 360, 320)
+    OpenModalWindow("upgrade", "Auto Upgrade", 360, 380)
 return
 
 BtnCaptureAutoUpgrade:
@@ -4611,7 +4622,7 @@ ProcessJSCmd(cmd) {
         return
     }
     if (action = "upgrade-cfg") {
-        OpenModalWindow("upgrade", "Auto Upgrade", 360, 320)
+        OpenModalWindow("upgrade", "Auto Upgrade", 360, 380)
         return
     }
     if (action = "clear-log") {
@@ -4770,7 +4781,7 @@ OpenModalWindow(name, title, w, h) {
     ; Модалка принадлежит главному окну AHK. Она будет выше связки
     ; Roblox+панель, но не станет глобальным AlwaysOnTop для всех программ.
     SetWindowLongPtr(ModalHwnd, -8, MainGuiHwnd) ; GWLP_HWNDPARENT = owner
-    Gui, Modal:Color, 0x121212
+    Gui, Modal:Color, 0x0B1017
     Gui, Modal:Add, ActiveX, x0 y0 w%w% h%h% vWB_Modal, Shell.Explorer
     WB_Modal.Silent := true
     navURL := htmlURL . "?_=" . A_TickCount . "#" . name

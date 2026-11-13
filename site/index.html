@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mmacro — макрос для Roblox Tower Defense</title>
+  <meta name="description" content="Mmacro расставляет юнитов по слотам, распознаёт карту, прокачивает юнитов и возвращается в игру после вылета. Скачайте последнюю версию для Windows.">
+  <meta name="theme-color" content="#F1F4F2">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="Mmacro — фарм Roblox Tower Defense без ручной расстановки">
+  <meta property="og:description" content="Панель, пресеты, Auto-Rejoin и Discord-бот для Roblox Tower Defense. Прямое скачивание ZIP и история версий.">
+  <meta property="og:image" content="assets/og.png">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/unbounded-cyrillic.woff2" as="font" type="font/woff2">
+  <link rel="preload" href="assets/fonts/golos-text-cyrillic.woff2" as="font" type="font/woff2">
+  <link rel="stylesheet" href="styles.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Перейти к содержанию</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="index.html" aria-label="Mmacro — на главную">
+        <img class="brand-mark" src="assets/logo-mark.svg" width="44" height="33" alt="">
+        <span class="brand-word">Mmacro</span>
+      </a>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span class="sr-only">Открыть меню</span>
+        <span class="nav-toggle-bars" aria-hidden="true"><span></span><span></span></span>
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Основная навигация">
+        <a href="#features">Возможности</a>
+        <a href="#start">Первый запуск</a>
+        <a href="versions.html">Версии</a>
+        <a href="https://discord.gg/pYsA8PTEDQ" target="_blank" rel="noopener noreferrer">Discord</a>
+        <p class="mobile-nav-note">Mmacro для Windows <span>v<span data-current-version>1.0.13</span></span></p>
+      </nav>
+
+      <div class="header-actions">
+        <a class="version-chip" href="versions.html" aria-label="Текущая версия и история релизов">
+          <span class="version-chip-dot" aria-hidden="true"></span>
+          <span>v<span data-current-version>1.0.13</span></span>
+        </a>
+        <a class="button button-primary button-header" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>
+          Скачать
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="shell hero-layout">
+        <div class="hero-copy">
+          <div class="hero-lockup">
+            <img class="hero-logo" src="assets/logo-mark.svg" width="104" height="77" alt="">
+            <h1 id="hero-title">Mmacro</h1>
+          </div>
+
+          <p class="hero-title-sub">Фарм Roblox Tower Defense без ручной расстановки.</p>
+          <p class="hero-lede">Панель ставит юнитов по сохранённым слотам, распознаёт карту, прокачивает юнитов и возвращается в игру после вылета. Управлять забегом можно из панели или Discord.</p>
+
+          <div class="hero-actions">
+            <a class="button button-primary button-large" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>
+              <svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M5 20h14"/></svg>
+              <span>Скачать <span data-current-version>1.0.13</span></span>
+            </a>
+            <a class="text-link" href="versions.html">Все версии и изменения <span aria-hidden="true">→</span></a>
+          </div>
+
+          <p class="hero-meta">Windows <span aria-hidden="true">/</span> AutoHotkey v1.1 <span aria-hidden="true">/</span> ZIP с GitHub</p>
+
+          <dl class="release-strip" aria-label="Сведения о последнем релизе">
+            <div>
+              <dt>Последний релиз</dt>
+              <dd>v<span data-current-version>1.0.13</span></dd>
+            </div>
+            <div>
+              <dt>Опубликован</dt>
+              <dd><time data-release-date datetime="2026-08-18">18 августа 2026</time></dd>
+            </div>
+            <div>
+              <dt>В истории</dt>
+              <dd><span data-release-count>14</span> <span data-release-count-word>версий</span></dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="hero-visual">
+          <div class="map-shell" aria-hidden="true">
+            <div class="map-toolbar">
+              <span class="map-mode"><span class="map-mode-dot"></span>Infinite</span>
+              <span class="map-name">Rose Kingdom</span>
+              <span class="map-size">1280 × 720</span>
+            </div>
+            <div class="map-canvas">
+              <svg class="map-route" viewBox="0 0 640 470" preserveAspectRatio="none" aria-hidden="true">
+                <path class="map-road" d="M-40 370 C 85 370 128 322 198 298 S 332 306 380 222 S 480 116 680 125"/>
+                <path class="map-road-line" d="M-40 370 C 85 370 128 322 198 298 S 332 306 380 222 S 480 116 680 125"/>
+                <path class="map-path" d="M-40 370 C 85 370 128 322 198 298 S 332 306 380 222 S 480 116 680 125"/>
+              </svg>
+
+              <span class="slot slot-a"><span>1</span></span>
+              <span class="slot slot-b"><span>2</span></span>
+              <span class="slot slot-c is-active"><span>3</span></span>
+              <span class="slot slot-d"><span>4</span></span>
+              <span class="slot slot-e is-active"><span>5</span></span>
+              <span class="slot slot-f"><span>6</span></span>
+
+              <span class="map-caption">Слоты расставлены</span>
+
+              <div class="panel-mock">
+                <div class="panel-head">
+                  <span class="panel-brand">
+                    <img src="assets/logo-mark-dark.svg" width="22" height="16" alt="">
+                    <span>Mmacro</span>
+                  </span>
+                  <span class="panel-ver">v<span data-current-version>1.0.13</span></span>
+                </div>
+                <div class="panel-body">
+                  <div class="panel-row">
+                    <span>Mode</span>
+                    <span class="panel-select">Infinite</span>
+                  </div>
+                  <div class="panel-row">
+                    <span>Status</span>
+                    <span class="panel-status"><span class="status-dot"></span>All set</span>
+                  </div>
+                  <div class="panel-start">Start Farm <kbd>F9</kbd></div>
+                  <div class="panel-toggle-row">
+                    <span>Auto Upgrade</span>
+                    <span class="panel-check"></span>
+                  </div>
+                  <div class="panel-log"><span>08:41:12</span> Ожидание запуска</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="visual-caption"><span class="status-dot" aria-hidden="true"></span>Панель и Roblox работают как одно окно</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section features-section" id="features" aria-labelledby="features-title">
+      <div class="shell">
+        <header class="section-heading">
+          <h2 id="features-title">Что Mmacro делает сам</h2>
+          <p>Вы один раз настраиваете карту и кнопки. Дальше панель ведёт забег: от расстановки до повторного входа после вылета.</p>
+        </header>
+
+        <div class="feature-board">
+          <article class="feature-lead">
+            <span class="feature-icon feature-icon-large" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="25" height="25"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+            </span>
+            <h3>Расстановка по слотам</h3>
+            <p>Юниты встают по сохранённой разметке карты. Пресет хранит слоты, задержки, камеру и настройки Auto Upgrade.</p>
+
+            <div class="slot-plot" aria-hidden="true">
+              <span class="plot-road"></span>
+              <span class="plot-slot p1">1</span>
+              <span class="plot-slot p2 is-filled">2</span>
+              <span class="plot-slot p3 is-filled">3</span>
+              <span class="plot-slot p4">4</span>
+              <span class="plot-slot p5 is-filled">5</span>
+              <span class="plot-slot p6 is-filled">6</span>
+              <span class="plot-slot p7 is-filled">7</span>
+              <span class="plot-slot p8">8</span>
+            </div>
+          </article>
+
+          <div class="feature-list">
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8"/></svg>
+              </span>
+              <div>
+                <h3>Распознаёт карту</h3>
+                <p>Читает заголовок <span class="inline-note">Travelling to...</span> и сверяет его с шаблонами выбранного режима.</p>
+              </div>
+            </article>
+
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22"><path d="m6 15 6-6 6 6M6 20l6-6 6 6"/></svg>
+              </span>
+              <div>
+                <h3>Прокачивает по приоритету</h3>
+                <p>Auto Upgrade нажимает улучшения для нужных юнитов столько раз, сколько задано в списке приоритетов.</p>
+              </div>
+            </article>
+
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 5h10v12H5zM9 9h10v12H9z"/></svg>
+              </span>
+              <div>
+                <h3>Голосует за карточки</h3>
+                <p>Windows OCR читает три карточки Summer Event, убирает тиры I–III и выбирает лучшую по вашему списку.</p>
+              </div>
+            </article>
+
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22"><path d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.4-2L20 9M4 15l2.5 2a7 7 0 0 0 11.4-2"/></svg>
+              </span>
+              <div>
+                <h3>Возвращается после вылета</h3>
+                <p>Auto-Rejoin заходит по VIP/share-ссылке и повторяет записанные действия после переподключения.</p>
+              </div>
+            </article>
+
+            <article class="feature-item">
+              <span class="feature-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 6h16v10H8l-4 4zM8 10h8M8 13h5"/></svg>
+              </span>
+              <div>
+                <h3>Помнит ваши настройки</h3>
+                <p>Пресеты, горячие клавиши и задержки сохраняются отдельно от обновлений и не затираются новым ZIP.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <aside class="bot-band" aria-labelledby="bot-title">
+          <div class="bot-copy">
+            <h3 id="bot-title">Забег под контролем из Discord</h3>
+            <p>Бот пришлёт снимок игровой области, покажет текущую карту и число ранов, а следующую карту поставит в очередь после завершения раунда.</p>
+            <a class="text-link text-link-light" href="https://github.com/mozrg/Mmacro" target="_blank" rel="noopener noreferrer">Как подключить бота <span aria-hidden="true">→</span></a>
+          </div>
+          <ul class="bot-commands" aria-label="Команды Discord-бота">
+            <li><code>/screenshot</code><span>снимок игры</span></li>
+            <li><code>/runs</code><span>статус фарма</span></li>
+            <li><code>/maps</code><span>список карт</span></li>
+            <li><code>/map</code><span>выбор карты</span></li>
+          </ul>
+        </aside>
+      </div>
+    </section>
+
+    <section class="download-band" id="download" aria-labelledby="download-title">
+      <div class="shell download-band-inner">
+        <div>
+          <p class="download-kicker">Актуальная сборка</p>
+          <h2 id="download-title">Mmacro <span class="download-version">v<span data-current-version>1.0.13</span></span></h2>
+          <p class="download-lede">Один ZIP: панель, карты, настройки и Discord-бот. AutoHotkey v1.1 устанавливается отдельно.</p>
+        </div>
+        <div class="download-actions">
+          <a class="button button-light button-large" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>
+            <svg class="icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M5 20h14"/></svg>
+            Скачать ZIP <span class="button-version">v<span data-current-version>1.0.13</span></span>
+          </a>
+          <a class="button button-ghost-light" href="versions.html">История версий</a>
+          <p class="direct-note direct-note-light">Прямая ссылка на GitHub, без регистрации</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section start-section" id="start" aria-labelledby="start-title">
+      <div class="shell">
+        <header class="section-heading section-heading-split">
+          <div>
+            <h2 id="start-title">От архива до первого забега</h2>
+            <p>Четыре шага. После первого запуска панель запомнит выбранный режим, карту и настройки.</p>
+          </div>
+          <a class="text-link" href="https://github.com/mozrg/Mmacro" target="_blank" rel="noopener noreferrer">Полная инструкция <span aria-hidden="true">→</span></a>
+        </header>
+
+        <div class="start-grid">
+          <ol class="steps">
+            <li>
+              <span class="step-number" aria-hidden="true">1</span>
+              <div>
+                <h3>Скачайте ZIP</h3>
+                <p>Возьмите последнюю версию с этой страницы. Внутри — панель, карты и бот.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">2</span>
+              <div>
+                <h3>Распакуйте и поставьте AutoHotkey</h3>
+                <p>Нужен <strong>AutoHotkey v1.1</strong>. Версия v2 не подойдёт: скрипт использует синтаксис v1.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">3</span>
+              <div>
+                <h3>Запустите панель</h3>
+                <p>Откройте <code>macro\main.ahk</code>. Roblox должен быть запущен и виден на экране.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-number" aria-hidden="true">4</span>
+              <div>
+                <h3>Нажмите Embed</h3>
+                <p>Выберите режим, проверьте координаты кнопок и запустите фарм кнопкой <strong>Start Farm</strong> или клавишей <kbd>F9</kbd>.</p>
+              </div>
+            </li>
+          </ol>
+
+          <aside class="requirements-card" aria-labelledby="requirements-title">
+            <h3 id="requirements-title">Понадобится</h3>
+            <ul class="requirements-list">
+              <li><span>Система</span><strong>Windows</strong></li>
+              <li><span>Скрипты</span><strong>AutoHotkey v1.1</strong></li>
+              <li><span>Игра</span><strong>Roblox Player</strong></li>
+              <li><span>Игровая область</span><strong>1280 × 720</strong></li>
+              <li><span>Сеть</span><strong>Для обновлений и бота</strong></li>
+            </ul>
+            <div class="requirement-note">
+              <strong>Не запускайте две копии Mmacro.</strong>
+              <p>Если окна или модалки отображаются неправильно, полностью закройте панель и запустите скрипт заново.</p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section class="section releases-preview-section" id="releases" aria-labelledby="releases-title">
+      <div class="shell">
+        <header class="section-heading section-heading-split">
+          <div>
+            <h2 id="releases-title">Последние версии</h2>
+            <p>Что меняется от релиза к релизу. Всего в истории <span data-release-count>14</span> <span data-release-count-word>версий</span>.</p>
+          </div>
+          <a class="text-link" href="versions.html">Открыть всю историю <span aria-hidden="true">→</span></a>
+        </header>
+
+        <div class="release-preview" data-home-releases>
+          <div class="latest-release">
+            <div class="latest-main">
+              <p class="release-state"><span class="status-dot" aria-hidden="true"></span>Последний релиз</p>
+              <div class="latest-heading">
+                <h3>v<span data-current-version>1.0.13</span></h3>
+                <time data-release-date datetime="2026-08-18">18 августа 2026</time>
+              </div>
+              <p class="latest-note">Исправлена настройка пресетов.</p>
+            </div>
+            <div class="latest-side">
+              <a class="button button-primary" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>Скачать ZIP</a>
+              <a class="text-link" href="versions.html">Все изменения <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+          <div class="release-preview-list" aria-label="Предыдущие релизы">
+            <div class="release-preview-row">
+              <span class="preview-version">v1.0.12</span>
+              <time datetime="2026-08-13">13 августа 2026</time>
+              <p>Новый способ фарма — кнопка автоплей.</p>
+              <a href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.12.zip" aria-label="Скачать версию 1.0.12">ZIP <span aria-hidden="true">↓</span></a>
+            </div>
+            <div class="release-preview-row">
+              <span class="preview-version">v1.0.11</span>
+              <time datetime="2026-08-12">12 августа 2026</time>
+              <p>Исправление ошибок.</p>
+              <a href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.11.zip" aria-label="Скачать версию 1.0.11">ZIP <span aria-hidden="true">↓</span></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section faq-section" id="faq" aria-labelledby="faq-title">
+      <div class="shell faq-layout">
+        <header class="faq-heading">
+          <h2 id="faq-title">Коротко о частом</h2>
+          <p>Если что-то не работает, начните с этих ответов. Полная документация лежит в README репозитория.</p>
+        </header>
+
+        <div class="faq-list">
+          <details class="faq-item">
+            <summary>Нужен ли AutoHotkey?</summary>
+            <div class="faq-answer">
+              <p>Да. Установите AutoHotkey v1.1 и запустите <code>macro\main.ahk</code>. Версия v2 несовместима со скриптом.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Почему не нажимаются кнопки или юниты ставятся не туда?</summary>
+            <div class="faq-answer">
+              <p>Проверьте разрешение и масштаб интерфейса Roblox. После изменения размера окна или расположения элементов заново откалибруйте кнопки в разделе <strong>Calibrate</strong>.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Как проверить, какую карту видит макрос?</summary>
+            <div class="faq-answer">
+              <p>Выберите режим, откройте в игре экран <span class="inline-note">Travelling to...</span>, затем перейдите в <strong>Settings → Map detection</strong> и нажмите <strong>Detect map</strong>. В карточке появится название и процент совпадения.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Не выбираются карточки Summer Event</summary>
+            <div class="faq-answer">
+              <p>Откройте <strong>Card voting → Configure</strong> и нажмите <strong>Detect cards</strong> на экране выбора. Если в результате стоит «?», проверьте установленный английский язык OCR в Windows.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Где хранятся мои настройки?</summary>
+            <div class="faq-answer">
+              <p>Основное — в <code>macro\config.ini</code>, <code>macro\ahk\settings.ini</code>, <code>macro\ahk\presets.ini</code> и папке <code>macro\maps\</code>. Перед переносом на другой компьютер сохраните эти файлы отдельно.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Как обновиться, не потеряв пресеты?</summary>
+            <div class="faq-answer">
+              <p>Скачайте новый ZIP и замените файлы программы, не удаляя пользовательские настройки и папку с картами. История изменений и старые версии доступны на <a href="versions.html">странице версий</a>.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-main">
+      <div class="footer-brand">
+        <a class="footer-logo" href="index.html" aria-label="Mmacro — на главную">
+          <img src="assets/logo-mark-dark.svg" width="58" height="43" alt="">
+          <span>Mmacro</span>
+        </a>
+        <p>Панель для автоматической расстановки юнитов и фарма в Roblox Tower Defense.</p>
+      </div>
+
+      <div class="footer-column">
+        <h2>Разделы</h2>
+        <a href="#features">Возможности</a>
+        <a href="#start">Первый запуск</a>
+        <a href="versions.html">Версии</a>
+        <a href="#faq">Частые вопросы</a>
+      </div>
+
+      <div class="footer-column">
+        <h2>Ссылки</h2>
+        <a href="https://github.com/mozrg/Mmacro" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://discord.gg/pYsA8PTEDQ" target="_blank" rel="noopener noreferrer">Discord</a>
+        <a href="https://github.com/mozrg/Mmacro#readme" target="_blank" rel="noopener noreferrer">Документация</a>
+      </div>
+
+      <div class="footer-column footer-version">
+        <h2>Сборка</h2>
+        <strong>v<span data-current-version>1.0.13</span></strong>
+        <time data-release-date datetime="2026-08-18">18 августа 2026</time>
+        <a class="footer-download" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>Скачать ZIP <span aria-hidden="true">↓</span></a>
+      </div>
+    </div>
+
+    <div class="shell footer-bottom">
+      <p>© <span data-year>2026</span> Mmacro</p>
+      <p>Сторонний проект, не связан с Roblox Corporation.</p>
+      <p>Актуальная версия: <span data-current-version>1.0.13</span></p>
+    </div>
+  </footer>
+
+  <script src="data/releases.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

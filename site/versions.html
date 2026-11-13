@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Версии Mmacro — история релизов и скачивание</title>
+  <meta name="description" content="Все опубликованные версии Mmacro: дата релиза, список изменений и прямая ссылка на скачивание ZIP с GitHub.">
+  <meta name="theme-color" content="#F1F4F2">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="Версии Mmacro — история релизов">
+  <meta property="og:description" content="Что изменилось в каждом релизе и прямая ссылка на скачивание нужной версии.">
+  <meta property="og:image" content="assets/og.png">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/unbounded-cyrillic.woff2" as="font" type="font/woff2">
+  <link rel="preload" href="assets/fonts/golos-text-cyrillic.woff2" as="font" type="font/woff2">
+  <link rel="stylesheet" href="styles.css">
+  <script>document.documentElement.classList.add('js');</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Перейти к содержанию</a>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="brand" href="index.html" aria-label="Mmacro — на главную">
+        <img class="brand-mark" src="assets/logo-mark.svg" width="44" height="33" alt="">
+        <span class="brand-word">Mmacro</span>
+      </a>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span class="sr-only">Открыть меню</span>
+        <span class="nav-toggle-bars" aria-hidden="true"><span></span><span></span></span>
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Основная навигация">
+        <a href="index.html#features">Возможности</a>
+        <a href="index.html#start">Первый запуск</a>
+        <a href="versions.html" aria-current="page">Версии</a>
+        <a href="https://discord.gg/pYsA8PTEDQ" target="_blank" rel="noopener noreferrer">Discord</a>
+        <p class="mobile-nav-note">Mmacro для Windows <span>v<span data-current-version>1.0.13</span></span></p>
+      </nav>
+
+      <div class="header-actions">
+        <a class="version-chip" href="versions.html" aria-label="Текущая версия и история релизов">
+          <span class="version-chip-dot" aria-hidden="true"></span>
+          <span>v<span data-current-version>1.0.13</span></span>
+        </a>
+        <a class="button button-primary button-header" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>
+          Скачать
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="versions-hero" aria-labelledby="versions-title">
+      <div class="shell versions-hero-inner">
+        <div>
+          <p class="breadcrumbs"><a href="index.html">Главная</a><span aria-hidden="true">/</span>Версии</p>
+          <h1 id="versions-title">Версии Mmacro</h1>
+          <p class="versions-lede">Все опубликованные сборки в одном месте. Для обычного запуска берите последнюю версию; более старые пригодятся, если нужно откатиться или сравнить поведение.</p>
+        </div>
+
+        <aside class="current-release" aria-labelledby="current-release-title">
+          <p class="current-release-state"><span class="status-dot" aria-hidden="true"></span><span id="current-release-title">Последний релиз</span></p>
+          <p class="current-release-version">v<span data-current-version>1.0.13</span></p>
+          <time data-release-date datetime="2026-08-18">18 августа 2026</time>
+          <a class="button" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>Скачать ZIP</a>
+          <p class="direct-note">Прямая ссылка на GitHub, без регистрации</p>
+        </aside>
+      </div>
+    </section>
+
+    <section class="release-register" aria-labelledby="register-title">
+      <div class="shell">
+        <div class="release-register-head">
+          <h2 id="register-title">История релизов</h2>
+          <p><span data-release-count>14</span> <span data-release-count-word>версий</span></p>
+        </div>
+
+        <p class="register-note"><span class="status-dot" aria-hidden="true"></span>Заметки и даты берутся из опубликованных GitHub Releases. При недоступности API показывается проверенный снимок данных.</p>
+
+        <div class="release-list" data-release-list>
+          <div class="release-empty">Загружаю историю версий…</div>
+        </div>
+
+        <noscript>
+          <div class="release-noscript">
+            Для полной истории нужен JavaScript. Последнюю версию 1.0.13 можно
+            <a href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip">скачать напрямую с GitHub</a>,
+            а все релизы посмотреть в
+            <a href="https://github.com/mozrg/Mmacro/releases">GitHub Releases</a>.
+          </div>
+        </noscript>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-main">
+      <div class="footer-brand">
+        <a class="footer-logo" href="index.html" aria-label="Mmacro — на главную">
+          <img src="assets/logo-mark-dark.svg" width="58" height="43" alt="">
+          <span>Mmacro</span>
+        </a>
+        <p>Панель для автоматической расстановки юнитов и фарма в Roblox Tower Defense.</p>
+      </div>
+
+      <div class="footer-column">
+        <h2>Разделы</h2>
+        <a href="index.html#features">Возможности</a>
+        <a href="index.html#start">Первый запуск</a>
+        <a href="versions.html" aria-current="page">Версии</a>
+        <a href="index.html#faq">Частые вопросы</a>
+      </div>
+
+      <div class="footer-column">
+        <h2>Ссылки</h2>
+        <a href="https://github.com/mozrg/Mmacro" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://discord.gg/pYsA8PTEDQ" target="_blank" rel="noopener noreferrer">Discord</a>
+        <a href="https://github.com/mozrg/Mmacro#readme" target="_blank" rel="noopener noreferrer">Документация</a>
+      </div>
+
+      <div class="footer-column footer-version">
+        <h2>Сборка</h2>
+        <strong>v<span data-current-version>1.0.13</span></strong>
+        <time data-release-date datetime="2026-08-18">18 августа 2026</time>
+        <a class="footer-download" href="https://github.com/mozrg/Mmacro/archive/refs/tags/1.0.13.zip" data-download>Скачать ZIP <span aria-hidden="true">↓</span></a>
+      </div>
+    </div>
+
+    <div class="shell footer-bottom">
+      <p>© <span data-year>2026</span> Mmacro</p>
+      <p>Сторонний проект, не связан с Roblox Corporation.</p>
+      <p>Актуальная версия: <span data-current-version>1.0.13</span></p>
+    </div>
+  </footer>
+
+  <script src="data/releases.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
